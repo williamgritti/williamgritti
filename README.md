@@ -45,6 +45,7 @@ the rest of the iceberg is below the waterline, in repos you can't see.
 ![Redis](https://img.shields.io/badge/Redis-0B0E14?style=for-the-badge&logo=redis&logoColor=E11D2A)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-0B0E14?style=for-the-badge&logo=cloudflare&logoColor=E11D2A)
 ![Railway](https://img.shields.io/badge/Railway-0B0E14?style=for-the-badge&logo=railway&logoColor=E11D2A)
+![Vercel](https://img.shields.io/badge/Vercel-0B0E14?style=for-the-badge&logo=vercel&logoColor=E11D2A)
 ![Git](https://img.shields.io/badge/Git-0B0E14?style=for-the-badge&logo=git&logoColor=E11D2A)
 
 ---
