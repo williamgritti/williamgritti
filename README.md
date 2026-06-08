@@ -54,8 +54,8 @@ the rest of the iceberg is below the waterline, in repos you can't see.
 
 Two repos out in the open. Yes, that's intentional. The good stuff lives behind `chmod 700` and a personality.
 
-- **[`microempresa-app`](https://github.com/williamgritti/microempresa-app)** — `HTML`
-- **[`cinapse-app`](https://github.com/williamgritti/cinapse-app)** — `JavaScript`
+- **[`cinapse-app`](https://github.com/williamgritti/cinapse-app)** — `JavaScript` · the cinema habit, compiled. → **[live demo ↗](https://cinapse-app.vercel.app/)**
+- **[`microempresa-app`](https://github.com/williamgritti/microempresa-app)** — `HTML` · a small tool that escaped containment.
 
 > Everything worth shipping, I ship in private. Consider this the trailer, not the film.
 
@@ -91,6 +91,7 @@ Two repos out in the open. Yes, that's intentional. The good stuff lives behind 
 
 <!-- Contador de visitas — não depende de atividade, só conta quem cai aqui -->
 ![Profile Views](https://komarev.com/ghpvc/?username=williamgritti&style=for-the-badge&color=E11D2A&label=ACCOMPLICES)
+[![Email](https://img.shields.io/badge/leave%20a%20message-0B0E14?style=for-the-badge&logo=gmail&logoColor=E11D2A)](mailto:william.gritti@gmail.com)
 
 <br/>
 
