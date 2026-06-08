@@ -35,7 +35,7 @@ class William:
 
 ## `cat stack.txt`
 
-What I actually build with. The public repos here are HTML and JavaScript;
+What I actually build with. The public repos here run on Flask and JavaScript;
 the rest of the iceberg is below the waterline, in repos you can't see.
 
 ![Python](https://img.shields.io/badge/Python-0B0E14?style=for-the-badge&logo=python&logoColor=E11D2A)
@@ -55,7 +55,7 @@ the rest of the iceberg is below the waterline, in repos you can't see.
 Two repos out in the open. Yes, that's intentional. The good stuff lives behind `chmod 700` and a personality.
 
 - **[`cinapse-app`](https://github.com/williamgritti/cinapse-app)** — `JavaScript` · the cinema habit, compiled. → **[live demo ↗](https://cinapse-app.vercel.app/)**
-- **[`microempresa-app`](https://github.com/williamgritti/microempresa-app)** — `HTML` · a small tool that escaped containment.
+- **[`microempresa-app`](https://github.com/williamgritti/microempresa-app)** — `Python · Flask` · a small-business manager — clients, inventory, cash flow, quotes-to-PDF — that escaped containment.
 
 > Everything worth shipping, I ship in private. Consider this the trailer, not the film.
 
