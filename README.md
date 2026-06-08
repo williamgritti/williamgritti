@@ -35,7 +35,7 @@ class William:
 
 ## `cat stack.txt`
 
-What I actually build with. The public repos here are HTML and JavaScript;
+What I actually build with. The public repos here run on Flask and JavaScript;
 the rest of the iceberg is below the waterline, in repos you can't see.
 
 ![Python](https://img.shields.io/badge/Python-0B0E14?style=for-the-badge&logo=python&logoColor=E11D2A)
@@ -45,6 +45,7 @@ the rest of the iceberg is below the waterline, in repos you can't see.
 ![Redis](https://img.shields.io/badge/Redis-0B0E14?style=for-the-badge&logo=redis&logoColor=E11D2A)
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-0B0E14?style=for-the-badge&logo=cloudflare&logoColor=E11D2A)
 ![Railway](https://img.shields.io/badge/Railway-0B0E14?style=for-the-badge&logo=railway&logoColor=E11D2A)
+![Vercel](https://img.shields.io/badge/Vercel-0B0E14?style=for-the-badge&logo=vercel&logoColor=E11D2A)
 ![Git](https://img.shields.io/badge/Git-0B0E14?style=for-the-badge&logo=git&logoColor=E11D2A)
 
 ---
@@ -53,8 +54,8 @@ the rest of the iceberg is below the waterline, in repos you can't see.
 
 Two repos out in the open. Yes, that's intentional. The good stuff lives behind `chmod 700` and a personality.
 
-- **[`microempresa-app`](https://github.com/williamgritti/microempresa-app)** — `HTML`
-- **[`cinapse-app`](https://github.com/williamgritti/cinapse-app)** — `JavaScript`
+- **[`cinapse-app`](https://github.com/williamgritti/cinapse-app)** — `JavaScript` · the cinema habit, compiled. → **[live demo ↗](https://cinapse-app.vercel.app/)**
+- **[`microempresa-app`](https://github.com/williamgritti/microempresa-app)** — `Python · Flask` · a small-business manager — clients, inventory, cash flow, quotes-to-PDF — that escaped containment.
 
 > Everything worth shipping, I ship in private. Consider this the trailer, not the film.
 
@@ -83,8 +84,14 @@ Two repos out in the open. Yes, that's intentional. The good stuff lives behind 
 
 <div align="center">
 
+<!-- Gráfico de atividade: mostra movimento, sem revelar conteúdo nem contagem de repos -->
+![activity graph](https://github-readme-activity-graph.vercel.app/graph?username=williamgritti&bg_color=0B0E14&color=E11D2A&line=E11D2A&point=FFFFFF&area=true&hide_border=true&custom_title=commits%20after%20dark)
+
+<br/>
+
 <!-- Contador de visitas — não depende de atividade, só conta quem cai aqui -->
 ![Profile Views](https://komarev.com/ghpvc/?username=williamgritti&style=for-the-badge&color=E11D2A&label=ACCOMPLICES)
+[![Email](https://img.shields.io/badge/leave%20a%20message-0B0E14?style=for-the-badge&logo=gmail&logoColor=E11D2A)](mailto:william.gritti@gmail.com)
 
 <br/>
 
