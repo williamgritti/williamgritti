@@ -11,7 +11,7 @@
 
 I'm the person your IT department warned you about — except I'm *in* the IT department.
 
-Fifteen-plus years inside the Rio Grande do Sul state tax authority taught me two things: bureaucracy is immortal, and nobody was going to automate my problems for me. So I learned Python. Then FastAPI, because raw `http.server` is a cry for help. Then React and TypeScript, because apparently suffering scales horizontally.
+Fifteen-plus years inside the Brazilian public sector taught me two things: bureaucracy is immortal, and nobody was going to automate my problems for me. So I learned Python. Then FastAPI, because raw `http.server` is a cry for help. Then React and TypeScript, because apparently suffering scales horizontally.
 
 No CS degree. A Business Administration degree, two specializations — one of them in Tax Law, which is exactly as thrilling as it sounds — and the specific brand of stubbornness that only sets in after fifteen years of reading legislation nobody else finishes.
 
@@ -20,7 +20,7 @@ By day I keep government infrastructure breathing. By night — and it is *alway
 ```python
 class William:
     def __init__(self):
-        self.role          = "IT Analyst @ State Tax Authority"
+        self.role          = "IT Analyst @ Brazilian public sector"
         self.stack         = ["Python", "FastAPI", "React", "TypeScript"]
         self.credentials   = "self-taught, suspiciously confident"
         self.chronotype    = "nocturnal (clinically, not aspirationally)"
@@ -62,7 +62,7 @@ Two repos out in the open. Yes, that's intentional. The good stuff lives behind 
 
 ## `./now.sh`
 
-- 🧾 Cramming **state tax legislation** into my skull via text-to-speech and spaced repetition, chasing the Auditor-Fiscal exam. The audiobook narrator and I are now in a committed relationship.
+- 🧾 Cramming **tax legislation** into my skull via text-to-speech and spaced repetition, chasing the Auditor-Fiscal exam. The audiobook narrator and I are now in a committed relationship.
 - 🤖 Maintaining a personal-assistant bot that runs my life better than I do — habits, schedules, and a chronobiology module that keeps reminding me I shouldn't exist before noon. (Private repo. You don't get to see it. Nobody does.)
 - 🎬 Writing trilingual criticism about transgressive and extreme cinema. Yes, I watched the thing you couldn't finish. No, I won't summarize it for you.
 - 🐤🦉 Losing, with great consistency, the war against my own circadian rhythm.
