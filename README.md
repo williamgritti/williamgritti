@@ -84,6 +84,11 @@ Two repos out in the open. Yes, that's intentional. The good stuff lives behind 
 
 <div align="center">
 
+<!-- Gráfico de atividade: mostra movimento, sem revelar conteúdo nem contagem de repos -->
+![activity graph](https://github-readme-activity-graph.vercel.app/graph?username=williamgritti&bg_color=0B0E14&color=E11D2A&line=E11D2A&point=FFFFFF&area=true&hide_border=true&custom_title=commits%20after%20dark)
+
+<br/>
+
 <!-- Contador de visitas — não depende de atividade, só conta quem cai aqui -->
 ![Profile Views](https://komarev.com/ghpvc/?username=williamgritti&style=for-the-badge&color=E11D2A&label=ACCOMPLICES)
 
