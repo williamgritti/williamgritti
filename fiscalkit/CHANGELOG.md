@@ -96,6 +96,29 @@ only the human-readable values changed.
 Long remediation text also wraps to a hanging indent instead of running past 140
 columns, which is the part of a report a reader skips.
 
+### The `Typing :: Typed` claim was not true
+
+`pyproject.toml` declared the ``Typing :: Typed`` classifier and the README
+showed a mypy-strict badge, but no PEP 561 ``py.typed`` marker was ever shipped.
+PEP 561 says a package without that marker is to be treated as untyped however
+well annotated it is, so none of the strict typing reached anyone installing it.
+
+It was worse than losing the annotations. A consumer running mypy against the
+built wheel got an error on the import itself:
+
+    error: Skipping analyzing "fiscalkit": module is installed, but missing
+    library stubs or py.typed marker  [import-untyped]
+
+so the package broke their type check while advertising the opposite, and a real
+argument-type error in the same file went unreported. With the marker in place
+mypy reports that error correctly and clean code passes.
+
+Found by inspecting the artifact `release.sh build` produces rather than trusting
+the badge. Guarded at both levels, because they fail independently: a unit test
+asserts the marker sits beside the installed package, and the build job asserts
+it is present in the wheel and then type-checks a consumer against that wheel,
+requiring the argument-type error to be reported and `import-untyped` not to be.
+
 ### `--diff` and `--fix`
 
 Four rules -- the numeric regex, the non-digit strip, the numeric SQL column and

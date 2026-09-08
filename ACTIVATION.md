@@ -241,7 +241,7 @@ skipped on the CNPJ angle and had to be wrong twice to recover from.
 
 Verified by execution in this session:
 
-- **281 tests** across the three configurations — 268 core, 273 with the MCP
+- **282 tests** across the three configurations — 269 core, 274 with the MCP
   extra, plus 8 differential — with `ruff`, `ruff format` and `mypy --strict`
   clean under each
 - **60,000 differential cases** against `brutils` and `validate-docbr`, two
@@ -262,6 +262,12 @@ Verified by execution in this session:
 - `--fix` end to end: the emitted diff is accepted by `git apply`, the findings
   count drops, what remains is only the rules with no mechanical fix, and a
   second `--fix` is a no-op
+- `./release.sh check` and `./release.sh build` on the current tree, not on the
+  tree they were written against: all gates green, wheel and sdist built, and
+  `twine check` passing on both
+- That the package's typing claim is actually delivered: the wheel carries a
+  PEP 561 marker, a consumer's `mypy` reports a real argument-type error against
+  the installed wheel, and correct usage type-checks clean
 - Every technical claim in `LAUNCH.md`
 
 Not verified, because it cannot be from here:

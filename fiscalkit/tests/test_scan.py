@@ -822,3 +822,21 @@ def test_documented_rule_counts_match_the_ruleset() -> None:
                 wrong.append(f"{path.relative_to(repo)}: claims {raw}, there are {len(RULES)}")
 
     assert not wrong, "stale rule counts in documentation: " + "; ".join(wrong)
+
+
+def test_package_ships_a_pep561_marker() -> None:
+    """The `Typing :: Typed` claim has to be true in the installed package.
+
+    `pyproject.toml` declares the ``Typing :: Typed`` classifier and the README
+    carries a mypy-strict badge, but PEP 561 says a package without a ``py.typed``
+    marker is to be treated as untyped no matter how well annotated it is. Without
+    the marker, a consumer running mypy does not merely lose the annotations: the
+    import itself errors with "missing library stubs or py.typed marker", so this
+    package breaks their type check while advertising the opposite.
+    """
+    from pathlib import Path
+
+    import fiscalkit
+
+    marker = Path(fiscalkit.__file__).parent / "py.typed"
+    assert marker.is_file(), f"PEP 561 marker missing at {marker}"

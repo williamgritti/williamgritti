@@ -344,3 +344,37 @@ jobs:
           cd /tmp
           /tmp/wheeltest/bin/python -c "from fiscalkit import *; import fiscalkit; assert len(fiscalkit.__all__) > 30"
           /tmp/wheeltest/bin/fiscalkit cnpj 12ABC34501DE35
+
+      # pyproject declares the "Typing :: Typed" classifier and the README shows a
+      # mypy-strict badge. PEP 561 makes both meaningless without a py.typed marker
+      # IN THE BUILT ARTIFACT: a consumer's mypy then fails on the import itself
+      # with "missing library stubs or py.typed marker". The unit test checks the
+      # source tree, which cannot catch a packaging config that drops the file.
+      - name: Assert the wheel carries the PEP 561 marker, and that types reach a consumer
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import glob, zipfile
+          whl = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(whl).namelist()
+          assert "fiscalkit/py.typed" in names, f"py.typed missing from {whl}: {names}"
+          print("py.typed present in", whl)
+          PY
+
+          /tmp/wheeltest/bin/pip install --quiet mypy
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          printf 'from fiscalkit import is_valid_cnpj\n\nok: bool = is_valid_cnpj("12ABC34501DE35")\n' > ok.py
+          printf 'from fiscalkit import is_valid_cnpj\n\nbad: int = is_valid_cnpj(12345)\n' > bad.py
+
+          # Correct usage must type-check clean against the installed wheel.
+          /tmp/wheeltest/bin/mypy ok.py
+
+          # And a real type error must be REPORTED AS SUCH. Before the marker existed
+          # this failed with import-untyped instead, which looks like a failure while
+          # proving the annotations were invisible.
+          out=$(/tmp/wheeltest/bin/mypy bad.py || true)
+          echo "$out"
+          echo "$out" | grep -q 'incompatible type "int"' \
+            || { echo "the argument type error was not reported -- annotations are not reaching consumers"; exit 1; }
+          echo "$out" | grep -q 'import-untyped' \
+            && { echo "mypy still treats fiscalkit as untyped"; exit 1; } || true
