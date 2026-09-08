@@ -53,19 +53,37 @@ line with your handle.
 
 ## 4. Where the money actually comes from
 
-Donations on a new library are a trickle. The realistic revenue is the paid tier
-this makes credible, and you already have the distribution for it:
+**Read this before pitching anything.** My original thesis for this package was
+that the July 2026 alphanumeric CNPJ deadline was an unserved market. I tested
+that assumption by installing the competition, and **it is false**:
 
-- **The 2026 alphanumeric CNPJ is a forcing function.** Every Brazilian system
-  that validates a CNPJ has to change before July 2026. `fiscalkit` already
-  handles it; most libraries reject it outright. That is a migration consulting
-  offer with a hard deadline attached, aimed at exactly the market fiscaltech.dev
-  already sells to.
-- **The OSS core is the credential.** It shows the tax-law-plus-Python
-  combination in public, which is the thing that is genuinely hard to copy.
-- **The paid layer** is the part that does not belong in the free library: a
-  hosted batch API, SEFAZ querying with certificate handling, ERP connectors,
-  and support with an SLA.
+- `brutils` 2.5.0 and `validate-docbr` 2.0.0 already implement the alphanumeric
+  CNPJ rules correctly — verified against valid values, wrong check digits,
+  tampered bases and letters in check-digit positions. All five edge cases match
+  `fiscalkit` exactly.
+- `fiscal-mcp` 0.2.1 already exists and is the same concept as this package's MCP
+  server, and broader: official XSD validation, NFS-e, and IBS/CBS.
+
+So do not sell "we support the 2026 CNPJ and others don't." Any Brazilian dev
+will check in thirty seconds and you will lose the room.
+
+What is actually true and defensible:
+
+- **The code is genuinely good** — zero dependencies, `mypy --strict`, 117 tests,
+  `Decimal` money, an honest treatment of the check-digit weakness. It is a
+  credible public work sample.
+- **Access-key decoding is a real gap** in the general-purpose libraries.
+  `brutils` has nothing for it.
+- **Your moat is not the library.** It is the tax-law specialization plus fifteen
+  years inside the machine. A commodity parser does not monetize that; advisory
+  and integration work does. The library is the credential that makes the
+  conversation happen, not the product.
+
+The larger deadline-driven change worth studying is the **IBS/CBS transition**
+under EC 132/2023, which reshapes fiscal documents far more than the CNPJ format
+does. That is where a tax-law-plus-Python specialist has a durable advantage.
+Validate demand before building, the way this section should have been validated
+first.
 
 ## 5. Distribution, when you want it
 

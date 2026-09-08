@@ -14,7 +14,9 @@ First release.
 - **CNPJ** validation supporting both the legacy numeric format and the
   alphanumeric format from *IN RFB nº 2.229/2024*, mandatory from July 2026.
   A single `ord(c) - 48` mapping serves both, so no feature flag is needed.
-  Includes check-digit generation via `check_digits_for`.
+  Includes check-digit generation via `check_digits_for`. Note that `brutils` and
+  `validate-docbr` already implement the alphanumeric rules correctly; this is
+  parity, not a differentiator.
 - **Access key** decoding: full 44-digit breakdown into state, emission period,
   issuer CNPJ, model, series, number, emission type and check digit.
 - **NF-e XML parsing** for `nfeProc`, `NFe` and bare `infNFe` roots, matching

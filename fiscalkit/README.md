@@ -12,8 +12,9 @@ NF-e XML into typed objects with `Decimal` money. Zero runtime dependencies.
 Ships with a CLI and an MCP server, so the same logic serves your code, your
 terminal, and your AI agent.
 
-> **Supports the alphanumeric CNPJ** introduced by *IN RFB nº 2.229/2024* and
-> mandatory from **July 2026**. Most Python libraries still reject it outright.
+> Handles the alphanumeric CNPJ from *IN RFB nº 2.229/2024*, mandatory from
+> **July 2026** — one code path, no feature flag. (`brutils` and `validate-docbr`
+> handle it correctly too; see [how this compares](#how-this-compares).)
 
 ```bash
 pip install fiscalkit
@@ -26,11 +27,17 @@ pip install fiscalkit
 Brazilian fiscal data is unusually hostile to work with. Access keys are packed
 44-digit records that most code treats as opaque strings. NF-e XML arrives in at
 least three different root shapes, is frequently ISO-8859-1, and buries the same
-tax value under a dozen CST-specific element names. And the CNPJ — the identifier
-every one of those documents hangs off — changes format in 2026.
+tax value under a dozen CST-specific element names.
 
-`fiscalkit` handles all of that in one place, correctly, with the reasoning
-written down.
+The Brazilian Python ecosystem already covers parts of this well, and `fiscalkit`
+does not pretend otherwise — the comparison below is honest about what is already
+solved elsewhere. What this package offers is the combination in one
+zero-dependency, strictly-typed place: identifier validation, access-key decoding,
+XML parsing, a CLI and an MCP server behind a single small API.
+
+If you only need CPF/CNPJ validation, use `brutils` — it is excellent and far
+broader. Reach for `fiscalkit` when you also want the access key decoded and the
+XML parsed without pulling in a code-generated schema stack.
 
 ---
 
@@ -138,6 +145,11 @@ Eight tools are exposed: `validar_cpf`, `validar_cnpj`, `calcular_dv_cnpj`,
 Works with both `mcp` 1.x and 2.x — the SDK renamed `FastMCP` to `MCPServer` in
 2.0, and `fiscalkit` detects which one you have rather than making you pin.
 
+`fiscalkit` is not the only Brazilian fiscal MCP server: [`fiscal-mcp`](https://pypi.org/project/fiscal-mcp/)
+validates NF-e, NFC-e and NFS-e against the official XSD schemas and covers
+IBS/CBS. If you need schema-level validation or NFS-e, use that one — it goes
+deeper on validation than this does.
+
 Invalid input comes back as a payload with `"valido": false` and a reason code,
 never as an exception. An agent that receives a structured "no" explains the
 problem; an agent that receives a stack trace just retries.
@@ -157,6 +169,30 @@ This library documents that rather than papering over it, and the property is
 [pinned by a test](tests/test_chave.py). If you need authenticity rather than
 typo-detection, you need the issuer's digital signature or a SEFAZ query — not
 the check digit.
+
+---
+
+## How this compares
+
+The Brazilian fiscal ecosystem is not empty. Here is where each package actually
+sits, verified by installing and testing them rather than by reading summaries:
+
+| Package | What it does | Overlap |
+|---|---|---|
+| [`brutils`](https://pypi.org/project/brutils/) | Broad Brazilian utilities: CPF, CNPJ, CEP, phone, plates, legal process. **Alphanumeric CNPJ handled correctly.** | Supersedes `fiscalkit` for identifier validation. Has **no** access-key decoding. |
+| [`validate-docbr`](https://pypi.org/project/validate-docbr/) | Document validation. Alphanumeric CNPJ handled correctly. | Same — identifiers only. |
+| [`nfelib`](https://pypi.org/project/nfelib/) | XSD-generated NF-e bindings, full layout coverage. | Far more complete for XML; heavier, code-generated. |
+| [`PyNFe`](https://pypi.org/project/PyNFe/) | SEFAZ web-service transport, certificate handling, transmission. | Different problem — `fiscalkit` never touches the network. |
+| [`fiscal-mcp`](https://pypi.org/project/fiscal-mcp/) | Offline NF-e/NFC-e/NFS-e validation against official XSD, IBS/CBS, as an MCP server. | Directly overlapping and deeper on validation. Use it if you need XSD or NFS-e. |
+
+**Where `fiscalkit` is actually worth choosing:** you want one small dependency-free
+package that decodes access keys *and* parses NF-e *and* validates identifiers,
+with `Decimal` money, `mypy --strict` types, a CLI that exits non-zero for CI, and
+an MCP server — without a code-generated schema layer. Access-key decoding in
+particular is missing from the general-purpose libraries.
+
+If that is not what you need, one of the packages above probably fits better.
+That is a genuine recommendation, not false modesty.
 
 ---
 
