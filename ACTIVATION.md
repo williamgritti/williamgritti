@@ -72,6 +72,19 @@ that assumption by installing the competition, and **it is false**:
 So do not sell "we support the 2026 CNPJ and others don't." Any Brazilian dev
 will check in thirty seconds and you will lose the room.
 
+**What changed after that finding.** The conclusion I first drew from it -- that
+the whole 2026 angle was dead -- was an overcorrection. A library handling the new
+format does not make a *system* ready. Verified: `^\d{14}$` regexes, `isdigit()`
+guards, `int()` casts, `BIGINT` columns and `re.sub(r"\D", ...)` normalization all
+accept `11222333000181` and reject or corrupt `12ABC34501DE35`. That code is in
+every legacy Brazilian system and no `pip install --upgrade` fixes it.
+
+`fiscalkit scan` finds it. Checked before building: no scanner for this exists on
+PyPI, and the packages that do exist (`brutils`, `validate-docbr`,
+`cnpj-alfanumerico`, `fiscal-mcp`) are all validators. **This is a real gap, and
+it is the honest lead generator** -- run the scan against a prospect's repository,
+show them the count, and the fix is the engagement.
+
 What is actually true and defensible:
 
 - **The code is genuinely good** — zero dependencies, `mypy --strict`, 117 tests,

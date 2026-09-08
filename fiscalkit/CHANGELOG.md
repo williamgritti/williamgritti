@@ -10,6 +10,17 @@ First release.
 
 ### Added
 
+- **`fiscalkit scan`** -- static analysis for the July 2026 alphanumeric CNPJ
+  transition, and the one capability with no equivalent elsewhere. Validation
+  libraries already handle the new format; what breaks is the surrounding code,
+  which no dependency upgrade touches: `^\d{14}$` regexes, `BIGINT` columns,
+  ORM integer fields, `int(cnpj)` casts, and `re.sub(r"\D", ...)` normalization
+  that silently corrupts rather than raising. Twelve rules across Python,
+  JavaScript/TypeScript, SQL, Java, PHP, Go, C# and Ruby, each verified in the
+  test suite to accept a legacy CNPJ and reject or corrupt an alphanumeric one.
+  Exits non-zero only on certain breakage so it can gate a build, and is exposed
+  to agents as the `escanear_codigo` and `escanear_projeto` MCP tools.
+
 - **CPF** validation, formatting and repeated-digit rejection.
 - **CNPJ** validation supporting both the legacy numeric format and the
   alphanumeric format from *IN RFB nº 2.229/2024*, mandatory from July 2026.

@@ -32,7 +32,18 @@ VALID_KEY = build_key()
 
 def test_every_tool_has_a_description() -> None:
     """FastMCP surfaces the docstring to the agent, so an empty one is a bug."""
-    assert len(TOOL_FUNCTIONS) == 8
+    assert set(TOOL_FUNCTIONS) == {
+        "validar_cpf",
+        "validar_cnpj",
+        "calcular_dv_cnpj",
+        "decodificar_chave",
+        "analisar_nfe",
+        "escanear_codigo",
+        "escanear_projeto",
+        "classificar_cfop",
+        "consultar_uf",
+        "listar_ufs",
+    }
     for name, func in TOOL_FUNCTIONS.items():
         assert (func.__doc__ or "").strip(), f"{name} has no docstring"
 
@@ -179,3 +190,45 @@ def test_registered_tools_match_tool_functions() -> None:
 
     names = {tool.name for tool in asyncio.run(build_server().list_tools())}
     assert names == set(TOOL_FUNCTIONS)
+
+
+def test_scan_tools_are_exposed_to_agents() -> None:
+    """The 2026 scanner is the differentiator; it must reach the agent surface."""
+    from fiscalkit.mcp.server import escanear_codigo, escanear_projeto
+
+    dirty = escanear_codigo('cnpj = int(row["cnpj"])', "python")
+    assert dirty["ok"] is True
+    assert dirty["pronto_para_2026"] is False
+    assert dirty["total"] >= 1
+
+    clean = escanear_codigo("from fiscalkit import is_valid_cnpj", "python")
+    assert clean["pronto_para_2026"] is True
+
+    missing = escanear_projeto("/nonexistent/path/xyz")
+    assert missing["ok"] is True
+    assert missing["arquivos_analisados"] == 0
+
+
+def test_cli_scan_exit_codes(tmp_path, capsys) -> None:
+    """Non-zero only on certain breakage, so it can gate a build."""
+    broken = tmp_path / "bad.py"
+    broken.write_text('cnpj = int(row["cnpj"])\n', encoding="utf-8")
+    assert main(["scan", str(tmp_path)]) == 1
+    assert "QUEBRA" in capsys.readouterr().out
+
+    clean = tmp_path / "clean"
+    clean.mkdir()
+    (clean / "ok.py").write_text("from fiscalkit import is_valid_cnpj\n", encoding="utf-8")
+    assert main(["scan", str(clean)]) == 0
+    capsys.readouterr()
+
+    assert main(["scan", str(tmp_path / "nope")]) == 2
+    capsys.readouterr()
+
+
+def test_cli_scan_json(tmp_path, capsys) -> None:
+    (tmp_path / "s.sql").write_text("CREATE TABLE e (cnpj BIGINT);\n", encoding="utf-8")
+    main(["scan", str(tmp_path), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["pronto_para_2026"] is False
+    assert payload["ocorrencias"][0]["regra"] == "CNPJ011"

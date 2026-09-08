@@ -30,6 +30,7 @@ from .mcp.server import (
     validar_cnpj,
     validar_cpf,
 )
+from .scan.scanner import scan_path
 
 __all__ = ["main"]
 
@@ -119,6 +120,41 @@ def _cmd_nfe(args: argparse.Namespace) -> int:
     return _emit(payload, args.json, lines)
 
 
+_SEVERITY_LABEL = {"breaks": "QUEBRA", "risky": "RISCO ", "review": "REVER "}
+
+
+def _cmd_scan(args: argparse.Namespace) -> int:
+    """Scan a path for code that will not survive the alphanumeric CNPJ."""
+    target = Path(args.caminho)
+    if not target.exists():
+        print(f"caminho nao encontrado: {target}", file=sys.stderr)
+        return 2
+    result = scan_path(target)
+    if args.json:
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return 1 if result.breaks else 0
+
+    for finding in result.sorted_findings():
+        label = _SEVERITY_LABEL.get(finding.severity, finding.severity)
+        print(f"{label} {finding.path}:{finding.line}  [{finding.rule_id}] {finding.title}")
+        print(f"       {finding.excerpt}")
+        print(f"       correcao: {finding.fix}")
+        print()
+
+    counts = result.counts()
+    print(
+        f"{result.files_scanned} arquivo(s) analisado(s), "
+        f"{len(result.findings)} ocorrencia(s): "
+        f"{counts.get('breaks', 0)} quebra, {counts.get('risky', 0)} risco, "
+        f"{counts.get('review', 0)} rever"
+    )
+    if result.is_clean:
+        print("nenhum padrao incompativel com o CNPJ alfanumerico encontrado")
+    # Non-zero only for certain breakage, so this can gate a build without
+    # failing it on advisory findings.
+    return 1 if result.breaks else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construct the argument parser for the ``fiscalkit`` command."""
     parser = argparse.ArgumentParser(
@@ -145,6 +181,13 @@ def build_parser() -> argparse.ArgumentParser:
     add("cpf", "valida um CPF", "valor", "o CPF", _cmd_cpf)
     add("cfop", "classifica um CFOP", "valor", "o CFOP", _cmd_cfop)
     add("nfe", "analisa um XML de NF-e", "arquivo", "caminho do XML", _cmd_nfe)
+    add(
+        "scan",
+        "procura codigo que quebra com o CNPJ alfanumerico de 2026",
+        "caminho",
+        "arquivo ou diretorio",
+        _cmd_scan,
+    )
     return parser
 
 

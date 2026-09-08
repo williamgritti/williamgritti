@@ -30,6 +30,7 @@ from ..exceptions import FiscalKitError, ValidationError
 from ..nfe.chave import AccessKey
 from ..nfe.models import Party
 from ..nfe.parser import parse_nfe
+from ..scan.scanner import scan_path, scan_text
 
 __all__ = ["TOOL_FUNCTIONS", "build_server", "main"]
 
@@ -158,6 +159,29 @@ def analisar_nfe(xml: str | bytes) -> dict[str, Any]:
     }
 
 
+def escanear_codigo(codigo: str, linguagem: str | None = None) -> dict[str, Any]:
+    """Scan a source snippet for code that breaks on alphanumeric CNPJs (2026).
+
+    Finds numeric-only regexes, integer casts and numeric columns -- the code
+    around a CNPJ validator, which upgrading a dependency does not fix.
+    """
+    findings = scan_text(codigo, path="<snippet>", language=linguagem)
+    return {
+        "ok": True,
+        "total": len(findings),
+        "pronto_para_2026": not findings,
+        "ocorrencias": [f.to_dict() for f in findings],
+    }
+
+
+def escanear_projeto(caminho: str) -> dict[str, Any]:
+    """Scan a directory for code that breaks on alphanumeric CNPJs (2026)."""
+    try:
+        return {"ok": True, **scan_path(caminho).to_dict()}
+    except OSError as exc:
+        return {"ok": False, "detalhe": str(exc)}
+
+
 def classificar_cfop(cfop: str) -> dict[str, Any]:
     """Classify a CFOP into direction (inbound/outbound) and scope."""
     info = classify_cfop(cfop)
@@ -205,6 +229,8 @@ TOOL_FUNCTIONS = {
     "calcular_dv_cnpj": calcular_dv_cnpj,
     "decodificar_chave": decodificar_chave,
     "analisar_nfe": analisar_nfe,
+    "escanear_codigo": escanear_codigo,
+    "escanear_projeto": escanear_projeto,
     "classificar_cfop": classificar_cfop,
     "consultar_uf": consultar_uf,
     "listar_ufs": listar_ufs,

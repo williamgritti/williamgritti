@@ -12,9 +12,10 @@ NF-e XML into typed objects with `Decimal` money. Zero runtime dependencies.
 Ships with a CLI and an MCP server, so the same logic serves your code, your
 terminal, and your AI agent.
 
-> Handles the alphanumeric CNPJ from *IN RFB nº 2.229/2024*, mandatory from
-> **July 2026** — one code path, no feature flag. (`brutils` and `validate-docbr`
-> handle it correctly too; see [how this compares](#how-this-compares).)
+> **`fiscalkit scan` finds the code in your project that breaks in July 2026.**
+> Validation libraries already handle the alphanumeric CNPJ. Your `^\d{14}$`
+> regex, your `BIGINT` column and your `int(cnpj)` cast do not — and no
+> dependency upgrade fixes those. Nothing else scans for them.
 
 ```bash
 pip install fiscalkit
@@ -38,6 +39,55 @@ XML parsing, a CLI and an MCP server behind a single small API.
 If you only need CPF/CNPJ validation, use `brutils` — it is excellent and far
 broader. Reach for `fiscalkit` when you also want the access key decoded and the
 XML parsed without pulling in a code-generated schema stack.
+
+---
+
+## The 2026 problem nobody is scanning for
+
+From July 2026, *IN RFB nº 2.229/2024* allows letters in the first twelve
+positions of a CNPJ. Every serious validation library already handles this —
+`brutils`, `validate-docbr` and `fiscalkit` all agree on every edge case.
+
+**That is not where systems break.** They break in the code *around* the
+validator, none of which a dependency upgrade touches:
+
+```console
+$ fiscalkit scan .
+QUEBRA app/fornecedor.py:3  [CNPJ001] Numeric-only CNPJ regex
+       CNPJ_RE = re.compile(r"^\d{14}$")
+       correcao: Match [0-9A-Z]{12}[0-9]{2} instead: the first twelve positions
+                 accept letters, the two check digits stay numeric.
+
+QUEBRA app/fornecedor.py:8  [CNPJ012] CNPJ mapped to an integer field in an ORM
+       cnpj = models.BigIntegerField(unique=True)
+       correcao: Use a character field of length 14.
+
+QUEBRA schema.sql:3  [CNPJ011] CNPJ column declared as a numeric type
+       cnpj BIGINT NOT NULL UNIQUE,
+       correcao: Migrate to CHAR(14) or VARCHAR(14). Plan for a backfill and for
+                 every foreign key that references this column.
+
+2 arquivo(s) analisado(s), 6 ocorrencia(s): 6 quebra, 0 risco, 0 rever
+```
+
+Each pattern is verified in the test suite to accept `11222333000181` and reject
+or corrupt `12ABC34501DE35`. A rule that cannot demonstrate that difference is not
+shipped as a rule.
+
+The insidious one is `re.sub(r"\D", "", cnpj)`: it raises nothing, it just
+silently returns a shorter, wrong value that then fails validation somewhere else
+entirely.
+
+`scan` exits non-zero **only** on certain breakage, so it gates a build without
+failing it on advisory findings:
+
+```bash
+fiscalkit scan . --json | jq '.pronto_para_2026'
+```
+
+Twelve rules across Python, JavaScript/TypeScript, SQL, Java, PHP, Go, C# and
+Ruby. Dependency directories are pruned and commented-out code is ignored,
+because a scanner that cries wolf gets muted after one run.
 
 ---
 
@@ -138,9 +188,12 @@ pip install 'fiscalkit[mcp]'
 }
 ```
 
-Eight tools are exposed: `validar_cpf`, `validar_cnpj`, `calcular_dv_cnpj`,
-`decodificar_chave`, `analisar_nfe`, `classificar_cfop`, `consultar_uf` and
-`listar_ufs`.
+Ten tools are exposed: `validar_cpf`, `validar_cnpj`, `calcular_dv_cnpj`,
+`decodificar_chave`, `analisar_nfe`, `escanear_codigo`, `escanear_projeto`,
+`classificar_cfop`, `consultar_uf` and `listar_ufs`.
+
+`escanear_codigo` lets an agent check a snippet it is about to write or review
+for 2026 breakage, which is where the mistake is cheapest to catch.
 
 Works with both `mcp` 1.x and 2.x — the SDK renamed `FastMCP` to `MCPServer` in
 2.0, and `fiscalkit` detects which one you have rather than making you pin.
@@ -185,10 +238,12 @@ sits, verified by installing and testing them rather than by reading summaries:
 | [`PyNFe`](https://pypi.org/project/PyNFe/) | SEFAZ web-service transport, certificate handling, transmission. | Different problem — `fiscalkit` never touches the network. |
 | [`fiscal-mcp`](https://pypi.org/project/fiscal-mcp/) | Offline NF-e/NFC-e/NFS-e validation against official XSD, IBS/CBS, as an MCP server. | Directly overlapping and deeper on validation. Use it if you need XSD or NFS-e. |
 
-**Where `fiscalkit` is actually worth choosing:** you want one small dependency-free
-package that decodes access keys *and* parses NF-e *and* validates identifiers,
-with `Decimal` money, `mypy --strict` types, a CLI that exits non-zero for CI, and
-an MCP server — without a code-generated schema layer. Access-key decoding in
+**Where `fiscalkit` is actually worth choosing:** `fiscalkit scan` has no
+equivalent anywhere — every package above validates a CNPJ, none of them finds the
+code that will reject one. Beyond that: access-key decoding, NF-e parsing and
+identifier validation in one dependency-free package with `Decimal` money,
+`mypy --strict` types, a CLI that exits non-zero for CI, and an MCP server —
+without a code-generated schema layer. Access-key decoding in
 particular is missing from the general-purpose libraries.
 
 If that is not what you need, one of the packages above probably fits better.
@@ -204,6 +259,7 @@ That is a genuine recommendation, not false modesty.
 | **CNPJ** | numeric **and** alphanumeric (2026), root/branch, check-digit generation |
 | **Access key** | full 44-digit decode, validation, DANFE-style formatting |
 | **NF-e XML** | `nfeProc` / `NFe` / `infNFe` roots, items, taxes across CST variants, totals, protocol |
+| **2026 scanner** | 12 rules over 8 languages finding code that breaks on alphanumeric CNPJs |
 | **CFOP** | direction and scope classification |
 | **UF** | all 27 IBGE codes, lookup by code or acronym |
 
@@ -227,7 +283,7 @@ git clone https://github.com/williamgritti/fiscalkit
 cd fiscalkit
 pip install -e '.[dev,mcp]'
 
-pytest              # 152 tests
+pytest              # 181 tests
 ruff check src tests
 mypy src/fiscalkit  # strict
 ```
