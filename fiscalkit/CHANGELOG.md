@@ -96,6 +96,31 @@ only the human-readable values changed.
 Long remediation text also wraps to a hanging indent instead of running past 140
 columns, which is the part of a report a reader skips.
 
+### The agent-facing scanner reported success for paths that do not exist
+
+`escanear_projeto` answered `{"ok": true, ...}` with zero findings for any path
+that was not there. An agent that mistyped a path, or passed one relative to the
+wrong directory, was told the scan succeeded and the project was clean.
+
+`scan_path` does not raise for a missing path -- `rglob` over a directory that is
+not there simply yields nothing -- so the `except OSError` branch never fired for
+the case it was written for. The CLI already exits 2 for both a missing path and
+a scan that read nothing, with a comment giving the reason: silence from a tool
+that looked at nothing must not read as a pass. The agent surface disagreed with
+its own CLI.
+
+The suite did not merely miss this. `test_scan_tools_are_exposed_to_agents`
+asserted ``missing["ok"] is True``, pinning the defect down as correct behaviour.
+
+Both a missing path and an empty scan now return `ok: false` with a reason, and
+carry the same keys as a successful scan so a caller never branches on which
+fields are present.
+
+Found by launching the installed `fiscalkit-mcp` console script and speaking the
+stdio protocol to it. The server had only ever been exercised through its tool
+functions, which does not cover whether the process starts, negotiates, or lists
+its tools -- all a client ever does.
+
 ### Scanning a single file told the user there was nothing to fix
 
 `fiscalkit scan caminho/arquivo.py --fix` printed "nenhuma correção automática

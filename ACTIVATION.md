@@ -241,7 +241,7 @@ skipped on the CNPJ angle and had to be wrong twice to recover from.
 
 Verified by execution in this session:
 
-- **284 tests** across the three configurations — 271 core, 276 with the MCP
+- **286 tests** across the three configurations — 273 core, 278 with the MCP
   extra, plus 8 differential — with `ruff`, `ruff format` and `mypy --strict`
   clean under each
 - **60,000 differential cases** against `brutils` and `validate-docbr`, two
@@ -268,6 +268,9 @@ Verified by execution in this session:
 - That the package's typing claim is actually delivered: the wheel carries a
   PEP 561 marker, a consumer's `mypy` reports a real argument-type error against
   the installed wheel, and correct usage type-checks clean
+- The MCP server started as a real process and driven over the stdio protocol:
+  `initialize` negotiates, `tools/list` returns all ten tools, and each one
+  answers correctly — including the error paths, which is where it was wrong
 - Every technical claim in `LAUNCH.md`
 
 Not verified, because it cannot be from here:

@@ -204,8 +204,11 @@ def test_scan_tools_are_exposed_to_agents() -> None:
     clean = escanear_codigo("from fiscalkit import is_valid_cnpj", "python")
     assert clean["pronto_para_2026"] is True
 
+    # This once asserted `ok is True` for a path that does not exist, which is how
+    # the false all-clear survived: the suite did not merely miss the defect, it
+    # pinned it down as correct. A scan that read nothing is a failure.
     missing = escanear_projeto("/nonexistent/path/xyz")
-    assert missing["ok"] is True
+    assert missing["ok"] is False
     assert missing["arquivos_analisados"] == 0
 
 
@@ -424,3 +427,48 @@ def test_every_reason_code_has_a_translation() -> None:
     assert found, "no reason codes discovered -- the search itself is broken"
     missing = found - set(_REASON_PT)
     assert not missing, f"reason codes with no Portuguese translation: {sorted(missing)}"
+
+
+def test_escanear_projeto_rejects_a_path_that_does_not_exist(tmp_path) -> None:
+    """A scan that read nothing must not answer `ok: true`.
+
+    `scan_path` does not raise for a missing path: `rglob` over a directory that
+    is not there simply yields nothing. So the `except OSError` branch never fired
+    for the case it was written for, and an agent that mistyped a path, or passed
+    one relative to the wrong directory, was told the scan succeeded and the
+    project was clean. That is the same false all-clear that directory pruning
+    once produced, arriving through the agent-facing surface instead of the CLI.
+    """
+    from fiscalkit.mcp.server import escanear_projeto
+
+    missing = escanear_projeto(str(tmp_path / "nao-existe"))
+    assert missing["ok"] is False
+    assert "não encontrado" in missing["detalhe"]
+
+    # A real directory with nothing scannable in it is the same failure: the CLI
+    # exits 2 for it, and this must not disagree.
+    (tmp_path / "leiame.txt").write_text("sem codigo aqui", encoding="utf-8")
+    empty = escanear_projeto(str(tmp_path))
+    assert empty["ok"] is False
+    assert empty["nada_analisado"] is True
+
+    # And a directory that does have something must still succeed.
+    (tmp_path / "f.py").write_text(
+        'import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8"
+    )
+    found = escanear_projeto(str(tmp_path))
+    assert found["ok"] is True
+    assert found["total"] == 1
+
+
+def test_escanear_projeto_accepts_a_single_file(tmp_path) -> None:
+    """The agent-facing tool must handle a file target, like the CLI does."""
+    from fiscalkit.mcp.server import escanear_projeto
+
+    target = tmp_path / "f.py"
+    target.write_text('import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8")
+
+    result = escanear_projeto(str(target))
+    assert result["ok"] is True
+    assert result["total"] == 1
+    assert result["ocorrencias"][0]["arquivo"] == "f.py"

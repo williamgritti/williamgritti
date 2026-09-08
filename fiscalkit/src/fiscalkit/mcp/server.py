@@ -20,6 +20,7 @@ exception usually just retries.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from ..codes.cfop import classify_cfop
@@ -30,7 +31,7 @@ from ..exceptions import FiscalKitError, ValidationError
 from ..nfe.chave import AccessKey
 from ..nfe.models import Party
 from ..nfe.parser import parse_nfe
-from ..scan.scanner import scan_path, scan_text
+from ..scan.scanner import ScanResult, scan_path, scan_text
 
 __all__ = ["TOOL_FUNCTIONS", "build_server", "main"]
 
@@ -176,10 +177,37 @@ def escanear_codigo(codigo: str, linguagem: str | None = None) -> dict[str, Any]
 
 def escanear_projeto(caminho: str) -> dict[str, Any]:
     """Scan a directory for code that breaks on alphanumeric CNPJs (2026)."""
+    alvo = Path(caminho)
+    # A missing path does not raise: rglob over a directory that is not there
+    # simply yields nothing, so the OSError branch below never fired for the case
+    # it was written for and the tool answered `ok: true` for a path that does not
+    # exist. An agent that mistypes a path, or passes one relative to the wrong
+    # directory, was told the scan succeeded and found nothing.
+    if not alvo.exists():
+        # Same keys as a successful scan, so a caller never has to branch on which
+        # fields are present before reading a count.
+        return {
+            "ok": False,
+            "detalhe": f"caminho não encontrado: {caminho}",
+            **ScanResult().to_dict(),
+        }
     try:
-        return {"ok": True, **scan_path(caminho).to_dict()}
-    except OSError as exc:
+        resultado = scan_path(alvo)
+    except OSError as exc:  # pragma: no cover - permissions, or a vanished path
         return {"ok": False, "detalhe": str(exc)}
+    if resultado.scanned_nothing:
+        # The CLI exits 2 here for the same reason: silence from a tool that read
+        # nothing must not read as a pass. This is the shape the false all-clear
+        # took when directory pruning matched the scan root's own path.
+        return {
+            "ok": False,
+            "detalhe": (
+                f"nenhum arquivo analisável em {caminho} -- verifique o caminho "
+                "ou a extensão dos arquivos"
+            ),
+            **resultado.to_dict(),
+        }
+    return {"ok": True, **resultado.to_dict()}
 
 
 def classificar_cfop(cfop: str) -> dict[str, Any]:
