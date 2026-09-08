@@ -207,3 +207,31 @@ def test_cli_fix_exits_non_zero_when_a_write_fails(tmp_path, capsys, monkeypatch
     assert "0 arquivo(s) alterado(s)" in captured.out
     assert "não foi possível gravar" in captured.err
     assert exit_code == 1, "a failed write must not exit 0 even when nothing remains"
+
+
+def test_build_patches_ignores_a_finding_whose_rule_is_unknown(tmp_path) -> None:
+    """A finding naming a rule that no longer exists must be skipped, not crash.
+
+    `build_patches` guards with `rule is not None and rule.is_fixable`. Nothing
+    exercised the None half, so mutating the `and` to `or` -- which makes an
+    unknown rule id raise AttributeError on None -- left the suite green. That is
+    the shape of a defensive check nobody has ever defended against: it survives
+    review because it looks careful, and it is unverified.
+    """
+    from fiscalkit.scan.scanner import Finding
+
+    target = tmp_path / "f.py"
+    target.write_text('CNPJ_RE = r"^\\d{14}$"\n', encoding="utf-8")
+
+    stale = Finding(
+        rule_id="CNPJ999",
+        title="uma regra que não existe mais",
+        severity="breaks",
+        path="f.py",
+        line=1,
+        excerpt='CNPJ_RE = r"^\\d{14}$"',
+        explanation="",
+        fix="",
+    )
+    assert build_patches([stale], tmp_path) == []
+    assert target.read_text(encoding="utf-8") == 'CNPJ_RE = r"^\\d{14}$"\n'

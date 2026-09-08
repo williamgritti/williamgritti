@@ -167,3 +167,30 @@ def test_check_digits_for_rejects_wrong_length() -> None:
 
 def test_numeric_cnpj_not_flagged_alphanumeric() -> None:
     assert not is_alphanumeric_cnpj("11222333000181")
+
+
+@pytest.mark.parametrize(
+    ("value", "why"),
+    [
+        ("12ABC34501DEAB", "both check digits are letters"),
+        ("12ABC34501DE3A", "the second check digit is a letter"),
+        ("12ABC34501DEA5", "the first check digit is a letter"),
+        ("12ABC34501DE-5", "punctuation cannot stand in for a check digit"),
+    ],
+)
+def test_check_digits_must_be_numeric_even_in_the_alphanumeric_format(value: str, why: str) -> None:
+    """IN RFB 2.229/2024 widens the first twelve positions only.
+
+    The last two stay numeric, and that asymmetry is the single most distinctive
+    detail of the new format -- it is why one ASCII-mapping code path can serve
+    both formats at all. The guard enforcing it was covered by no test: mutating
+    its `return False` to `return True` left the entire suite green, so a
+    refactor could have deleted it silently. The differential suite did not cover
+    it either, because it only ever corrupts the first twelve positions.
+    """
+    assert is_valid_cnpj(value) is False, why
+
+
+def test_a_valid_alphanumeric_cnpj_still_passes() -> None:
+    """Guards the test above from passing because everything is rejected."""
+    assert is_valid_cnpj("12ABC34501DE35") is True

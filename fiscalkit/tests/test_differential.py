@@ -131,3 +131,32 @@ def test_reference_libraries_are_actually_being_exercised(references) -> None:
         assert cnpj_ref("11222333000182") is False, f"{name} accepts a bad check digit"
         assert cpf_ref("11144477735") is True, f"{name} rejects a known-valid CPF"
         assert cpf_ref("11144477736") is False, f"{name} accepts a bad CPF"
+
+
+@pytest.mark.parametrize("reference", ["brutils", "validate-docbr"])
+def test_letters_in_check_digit_positions_match_reference(reference: str, references) -> None:
+    """The two check digits stay numeric; the references must agree that they do.
+
+    Every other case here corrupts only the first twelve positions, so this
+    asymmetry -- the defining detail of IN RFB 2.229/2024 -- was never compared
+    against an implementation written by someone else. A letter in position 13 or
+    14 must be rejected by all three.
+    """
+    _, ref = references[reference]
+    rng = random.Random(SEED + 4)
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    disagreements = []
+    for _ in range(1_000):
+        base = "".join(rng.choice(ALNUM) for _ in range(12))
+        digits = check_digits_for(base)
+        for candidate in (
+            base + rng.choice(letters) + digits[1],
+            base + digits[0] + rng.choice(letters),
+            base + rng.choice(letters) + rng.choice(letters),
+        ):
+            ours, theirs = is_valid_cnpj(candidate), ref(candidate)
+            if ours != theirs:
+                disagreements.append((candidate, ours, theirs))
+            if ours is not False:
+                disagreements.append((candidate, "we accepted a letter as a check digit", ours))
+    assert not disagreements, f"{len(disagreements)} disagreements, e.g. {disagreements[:5]}"

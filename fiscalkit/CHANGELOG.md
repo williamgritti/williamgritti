@@ -96,6 +96,26 @@ only the human-readable values changed.
 Long remediation text also wraps to a hanging indent instead of running past 140
 columns, which is the part of a report a reader skips.
 
+### The rule that check digits stay numeric was never tested
+
+IN RFB 2.229/2024 widens the first twelve positions of a CNPJ and leaves the last
+two numeric. That asymmetry is the defining detail of the format, and the reason
+one ASCII-mapping code path can serve both formats at all.
+
+`is_valid_cnpj` enforced it correctly, but nothing tested it: mutating that
+guard's `return False` to `return True` left the whole suite green, so
+`12ABC34501DEAB` would have validated and no test would have noticed. The
+differential suite did not cover it either, because every case it generates
+corrupts only the first twelve positions.
+
+Found by mutation testing rather than by reading. `ACTIVATION.md` had claimed
+this case was checked against the competing libraries, and it had been -- by
+hand, earlier, and never turned into a test, which is exactly how a guard ends up
+unprotected.
+
+Both gaps are now closed, and the differential suite compares letters in the
+check-digit positions against `brutils` and `validate-docbr` as well.
+
 ### A failed write left the tree half-fixed and raised a traceback
 
 `apply_patches` wrote each file in turn with no error handling, so a write that
