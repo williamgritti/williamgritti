@@ -48,6 +48,24 @@ First release.
 - **MCP server** (`fiscalkit-mcp`) exposing eight tools to AI agents, returning
   structured failure payloads rather than raising.
 
+### Made the multi-language claim true
+
+The README claimed twelve rules across eight languages, but the rules had only
+ever been tested against Python and SQL. Checked against idiomatic CNPJ handling
+in each claimed language and **eight of twenty-one cases were missed**: Go's
+`strconv.Atoi`, C#'s `Int32.Parse` and `public long Cnpj { get; set; }`, Ruby's
+`row[:cnpj].to_i`, PHP's `intval` and argument-position `str_pad`, Java's
+type-first `private BigInteger cnpj;`, and a chained `String(x.cnpj).padStart`.
+
+The rules were written Python-first and assumed the CNPJ is always the receiver
+of a method and always named before its type. Widened to cover argument
+position, method chains and type-first declarations; all twenty-one now fire.
+Precision was re-measured afterwards rather than assumed: twelve adversarial
+probes clean, and 3,212 third-party files plus 41 of `brutils` and
+`validate-docbr` still report nothing.
+
+A documented claim the code does not honour is the same defect as a false one.
+
 ### Validated against real Brazilian CNPJ code
 
 Running the scanner against `brutils` 2.5.0 and `validate-docbr` 2.0.0 -- 41

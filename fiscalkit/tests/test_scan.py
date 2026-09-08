@@ -435,3 +435,70 @@ def test_cnpj_mask_rule_ignores_other_masks(code: str, label: str) -> None:
 def test_cnpj_mask_rule_still_catches_the_real_thing(code: str) -> None:
     """The /0000 branch group is what distinguishes a CNPJ mask from the rest."""
     assert "CNPJ002" in _ids(code)
+
+
+# ---------------------------------------------------------------------------
+# The multi-language claim, verified against idiomatic code in each
+# ---------------------------------------------------------------------------
+
+LANGUAGE_CASES = [
+    ("javascript", "const CNPJ_RE = /^\\d{14}$/;\nconst cnpj = row.cnpj;", "numeric regex"),
+    ("javascript", "const cnpj = parseInt(row.cnpj, 10);", "parseInt"),
+    ("javascript", 'const cnpj = String(row.cnpj).padStart(14, "0");', "chained padStart"),
+    ("javascript", 'const cnpj = raw.replace(/\\D/g, "");', "strip non-digits"),
+    ("typescript", "const cnpj: number = Number(payload.cnpj);", "Number()"),
+    ("php", '$cnpj = preg_replace("/[^0-9]/", "", $raw_cnpj);', "preg_replace"),
+    ("php", "if (!ctype_digit($cnpj)) { throw new Exception(); }", "ctype_digit"),
+    ("php", '$cnpj = str_pad($cnpj, 14, "0", STR_PAD_LEFT);', "str_pad as argument"),
+    ("php", '$cnpj = intval($row["cnpj"]);', "intval"),
+    ("go", "cnpj, err := strconv.Atoi(row.CNPJ)", "strconv.Atoi"),
+    ("csharp", "int cnpj = Int32.Parse(row.Cnpj);", "Int32.Parse"),
+    ("csharp", "public long Cnpj { get; set; }", "long property"),
+    ("csharp", "cnpj = cnpj.PadLeft(14, '0');", "PadLeft"),
+    ("ruby", "cnpj = row[:cnpj].to_i", "to_i after subscript"),
+    ("ruby", 'cnpj = raw.gsub(/\\D/, "")', "gsub strip"),
+    ("java", "Long cnpj = Long.parseLong(row.getCnpj());", "parseLong"),
+    ("java", "private BigInteger cnpj;", "type-first field declaration"),
+    ("sql", "ALTER TABLE empresa ADD COLUMN cnpj NUMERIC(14);", "numeric column"),
+    ("sql", "cnpj DECIMAL(14,0) NOT NULL", "decimal column"),
+]
+
+
+@pytest.mark.parametrize(("language", "code", "label"), LANGUAGE_CASES)
+def test_idiomatic_breakage_is_caught_in_every_claimed_language(
+    language: str, code: str, label: str
+) -> None:
+    """The README claims eight languages; each must fire on idiomatic code.
+
+    The rules were written Python-first and originally missed eight of these --
+    Go's `strconv.Atoi`, C#'s `Int32.Parse` and `long Cnpj { get; set; }`,
+    Ruby's `row[:cnpj].to_i`, PHP's `intval` and argument-position `str_pad`,
+    Java's type-first field declaration, and chained `padStart`. A documented
+    claim that the code does not honour is the same defect as a wrong one.
+    """
+    assert scan_text(code, language=language), f"{language}: missed {label}"
+
+
+# ---------------------------------------------------------------------------
+# Precision after widening those rules
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("code", "label"),
+    [
+        ('print("CNPJ alfanumerico encontrado")', "print() with CNPJ in a string"),
+        ("sprint(cnpj)", "sprint"),
+        ("PhoneNumber(cnpj)", "PhoneNumber"),
+        ('total = int(row["quantity"])', "unrelated int cast"),
+        ("name = str_pad($nome, 20)", "unrelated str_pad"),
+        ("id = row[:order_id].to_i", "unrelated to_i"),
+        ("private BigInteger valorTotal;", "unrelated BigInteger field"),
+        ("public long OrderId { get; set; }", "unrelated long property"),
+        ("n, _ := strconv.Atoi(row.Quantity)", "unrelated Atoi"),
+        ("if not cnpj[12:].isdigit(): return False", "the correct 2026 slice check"),
+    ],
+)
+def test_widened_rules_did_not_lose_precision(code: str, label: str) -> None:
+    """Widening for other languages must not start flagging unrelated code."""
+    assert scan_text(code, language="python") == [], f"false positive on {label}"

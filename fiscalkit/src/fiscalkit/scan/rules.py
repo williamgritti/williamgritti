@@ -154,12 +154,16 @@ RULES: tuple[Rule, ...] = (
         id="CNPJ010",
         title="CNPJ cast to an integer",
         severity=BREAKS,
-        # The leading lookbehind matters: without it "print(" contains "int(" and
-        # every log line mentioning a CNPJ is reported as an integer cast.
+        # The lookbehind excludes a preceding word character so that "print("
+        # does not match on the "int(" inside it. It deliberately allows a
+        # preceding dot, because strconv.Atoi, Int32.Parse and Convert.ToInt64
+        # are exactly the calls worth finding in Go, C# and Java.
         pattern=_c(
-            r"(?:(?<![\w.])(?:int|long|bigint|atoi)\s*\(\s*[^)]{0,40}cnpj"
-            r"|(?:Integer\.parseInt|Long\.parseLong)\s*\(\s*[^)]{0,40}cnpj"
-            r"|cnpj\w*\s*\.\s*to_i\b)"
+            r"(?:(?<!\w)(?:int|long|bigint|atoi|intval|to_number)\s*\(\s*[^)]{0,40}cnpj"
+            r"|(?:Integer\.parseInt|Long\.parseLong|Int32\.Parse|Int64\.Parse"
+            r"|Convert\.ToInt32|Convert\.ToInt64|strconv\.(?:Atoi|ParseInt))"
+            r"\s*\(\s*[^)]{0,40}cnpj"
+            r"|cnpj[^\n]{0,24}\.\s*to_i\b)"
         ),
         explanation=(
             "Casting to an integer throws or truncates on an alphanumeric CNPJ, and "
@@ -186,9 +190,14 @@ RULES: tuple[Rule, ...] = (
         id="CNPJ012",
         title="CNPJ mapped to an integer field in an ORM",
         severity=BREAKS,
+        # Two shapes: `cnpj = IntegerField()` (Python/ORM, name first) and
+        # `private BigInteger cnpj;` or `public long Cnpj { get; set; }`
+        # (Java/C#, type first). Only the first was matched before.
         pattern=_c(
-            r"cnpj\w*\s*[:=]\s*(?:models\.)?(?:Big)?(?:Integer|Int|Number|Numeric|Decimal|Long)"
-            r"(?:Field|Column)?\b"
+            r"(?:cnpj\w*\s*[:=]\s*(?:models\.)?(?:Big)?"
+            r"(?:Integer|Int|Number|Numeric|Decimal|Long)(?:Field|Column)?\b"
+            r"|(?<!\w)(?:big)?(?:integer|int|int32|int64|long|number|numeric|decimal"
+            r"|biginteger|bigdecimal)\s+cnpj\w*\s*[;={,)])"
         ),
         explanation="The ORM will generate a numeric column that cannot hold letters.",
         fix="Use a character field of length 14.",
@@ -197,7 +206,12 @@ RULES: tuple[Rule, ...] = (
         id="CNPJ013",
         title="Zero-padding a CNPJ back to 14 characters",
         severity=RISKY,
-        pattern=_c(r"cnpj\w*\s*(?:\.|->|::)\s*(?:zfill|rjust|padStart|str_pad|PadLeft)\s*\("),
+        # Receiver form (cnpj.zfill), chained form (String(x.cnpj).padStart)
+        # and argument form (str_pad($cnpj, 14, ...)), which PHP uses.
+        pattern=_c(
+            r"(?:cnpj[^\n]{0,24}(?:\.|->|::)\s*(?:zfill|rjust|padStart|str_pad|PadLeft|padleft)\s*\("
+            r"|(?:zfill|rjust|padStart|str_pad|PadLeft)\s*\(\s*[^)]{0,30}cnpj)"
+        ),
         explanation=(
             "Zero-padding exists to repair a CNPJ that was stored as a number. The "
             "padding itself is harmless; what it implies about the storage is not."
