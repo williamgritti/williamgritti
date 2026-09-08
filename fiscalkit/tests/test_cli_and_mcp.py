@@ -357,3 +357,8 @@ def test_action_manifest_declares_what_the_readme_promises() -> None:
     # steps with -e, and `scan` exits non-zero by design when it finds breakage.
     scan_step = next(s for s in action["runs"]["steps"] if s.get("id") == "scan")
     assert scan_step["run"].count("|| true") >= 2
+    # The resolved SARIF path is logged because composite steps run at the
+    # workspace root regardless of the caller's working-directory, which is a
+    # mismatch that already broke this project's own CI once.
+    assert "wrote $(pwd)" in scan_step["run"]
+    assert "workspace root" in action["inputs"]["sarif-file"]["description"]

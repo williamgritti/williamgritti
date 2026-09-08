@@ -105,6 +105,10 @@ outputs, and fails the job only on certain breakage (`fail-on-break: false` to
 report without failing). SARIF generation always exits 0 so the upload succeeds
 even on a failing scan.
 
+`sarif-file` resolves against the **workspace root**, not against any
+`working-directory` your workflow sets — composite action steps do not inherit
+that default. The action logs the absolute path it wrote.
+
 ### As a pre-commit hook
 
 ```yaml

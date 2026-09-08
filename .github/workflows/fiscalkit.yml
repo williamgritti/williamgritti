@@ -110,6 +110,13 @@ jobs:
   action:
     name: dogfood the action
     runs-on: ubuntu-latest
+    # Override the workflow-level working-directory. A composite action's own
+    # steps always run at the workspace root regardless of the caller's default,
+    # so the assertions below have to look there too -- which is exactly the
+    # mismatch that made this job fail the first time it ran.
+    defaults:
+      run:
+        working-directory: .
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
