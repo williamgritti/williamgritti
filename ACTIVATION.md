@@ -279,7 +279,7 @@ skipped on the CNPJ angle and had to be wrong twice to recover from.
 
 Verified by execution in this session:
 
-- **308 tests** with the MCP extra and both reference libraries installed; 292
+- **309 tests** with the MCP extra and both reference libraries installed; 292
   of them need neither. `ruff`, `ruff format` and `mypy --strict` clean under
   each configuration
 - A mutation sweep over every module that carries logic: **99 mutations, 95

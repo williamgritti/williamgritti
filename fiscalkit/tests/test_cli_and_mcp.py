@@ -676,3 +676,39 @@ def test_readme_pins_adopters_to_the_version_this_package_is() -> None:
     expected = f"v{fiscalkit.__version__}"
     wrong = [r for r in pinned + revs if r != expected]
     assert not wrong, f"snippets pin {wrong}, but this package is {expected}"
+
+
+def test_readme_tool_list_matches_what_the_server_exposes() -> None:
+    """The README names every MCP tool and counts them; both drift on the next one.
+
+    An agent user reads that list to decide whether this server does what they
+    need, and a tool added without touching the README is invisible to them while
+    a tool removed leaves a name that resolves to nothing.
+    """
+    import re
+    from pathlib import Path
+
+    import fiscalkit
+    from fiscalkit.mcp.server import TOOL_FUNCTIONS
+
+    readme = Path(fiscalkit.__file__).resolve().parents[2] / "README.md"
+    if not readme.is_file():
+        pytest.skip("README is not on disk beside the package")
+    text = readme.read_text(encoding="utf-8")
+
+    start = text.index("tools are exposed")
+    # Bounded to that paragraph. A wider window swept up `mcp` from the sentence
+    # about SDK versions further down, which is a backticked lowercase word and
+    # not a tool.
+    paragraph = text[start : text.index("\n\n", start)]
+    listed = set(re.findall(r"`([a-z_]+)`", paragraph))
+    exposed = set(TOOL_FUNCTIONS)
+
+    assert listed >= exposed, f"README omits MCP tools: {sorted(exposed - listed)}"
+    assert listed <= exposed, f"README names tools that do not exist: {sorted(listed - exposed)}"
+
+    words = {10: "Ten", 11: "Eleven", 12: "Twelve", 13: "Thirteen"}
+    claimed = text[max(0, start - 20) : start].strip().split()[-1]
+    assert claimed.lower() == words.get(len(exposed), str(len(exposed))).lower(), (
+        f"README claims {claimed!r} tools; the server exposes {len(exposed)}"
+    )
