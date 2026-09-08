@@ -87,9 +87,27 @@ cd fiscalkit
 ./release.sh publish    # real, behind a typed version confirmation
 ```
 
-The name `fiscalkit` was free on PyPI during this session. Publishing claims it.
-This is the only step that was blocked here — the sandbox refuses
-`upload.pypi.org` — and everything up to it is verified green.
+The name `fiscalkit` is free on PyPI. Publishing claims it. Re-checked at the end
+of this session against the authoritative source:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://pypi.org/pypi/fiscalkit/json
+# 404 = free. 200 = taken, and the launch posts need a different name.
+```
+
+**Check that, not the project page.** `https://pypi.org/project/fiscalkit/`
+answers `200` to curl even for a name that does not exist, because it serves a
+bot-challenge interstitial titled "Client Challenge" rather than a 404. I read
+that 200 as "the name is taken" for about a minute. The JSON API is the endpoint
+that tells the truth.
+
+This is the only step blocked here, and the boundary is narrower than "no
+network": `pypi.org` and `files.pythonhosted.org` are on the proxy's bypass list
+and answer normally, so reading the index and installing packages work fine.
+`upload.pypi.org` answers `403` in about a tenth of a second, which is the egress
+policy refusing it rather than a timeout. `/root/.ccr/README.md` says a 403 there
+means report the host rather than route around it, so that is where this stops.
+Everything up to the upload is verified green.
 
 **Verify before moving on:**
 
@@ -179,7 +197,10 @@ dependency.
 
 `fiscalkit scan` finds all of it — 14 rules, 8 languages plus the schema formats
 that generate them, and it writes the patch for the four whose fix is
-mechanical. Checked before building
+mechanical. Re-checked against the live PyPI index at the end of this session:
+`cnpj-alfanumerico`, `fiscal-mcp`, `brutils`, `validate-docbr` and `pynfe` all
+still exist and are all still validators or web-service clients. No scanner. The
+differentiator holds. Checked before building
 that no such scanner exists on PyPI; every package that does is a validator.
 
 ---
@@ -207,6 +228,12 @@ documents far more than a CNPJ format change. Same structure: a mandatory
 deadline, real migration pain, and an advantage that needs both the tax law and
 the code. Have three customer conversations before writing any of it — the way
 section 6 should have been validated before I wrote the first version.
+
+**And read `fiscal-mcp` first.** Its PyPI summary already claims IBS/CBS support
+alongside NF-e, NFC-e and NFS-e validation, so the space is not empty the way the
+scanner space was. That is not a reason to skip it; it is a reason to find out
+what it does and does not cover *before* building, which is precisely the step I
+skipped on the CNPJ angle and had to be wrong twice to recover from.
 
 ---
 
