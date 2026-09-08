@@ -241,7 +241,7 @@ skipped on the CNPJ angle and had to be wrong twice to recover from.
 
 Verified by execution in this session:
 
-- **288 tests** across the three configurations — 274 core, 280 with the MCP
+- **290 tests** across the three configurations — 276 core, 282 with the MCP
   extra, plus 8 differential — with `ruff`, `ruff format` and `mypy --strict`
   clean under each
 - **60,000 differential cases** against `brutils` and `validate-docbr`, two

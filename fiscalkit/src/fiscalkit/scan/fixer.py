@@ -52,6 +52,23 @@ def _rewrite_line(line: str, rule_id: str) -> str:
     return line
 
 
+def _read_preserving_newlines(path: Path) -> str:
+    """Read *path* without translating its line endings.
+
+    ``Path.read_text`` opens in universal-newline mode, which turns every CRLF
+    into a bare LF in the returned string. Writing that string back rewrites the
+    entire file, so a one-line fix in a Windows-authored source tree arrived as a
+    diff touching every line -- which is exactly the reviewability ``--fix``
+    exists to provide. Brazilian enterprise codebases are full of CRLF, so this
+    is the common case here, not the exotic one.
+
+    ``newline=""`` leaves "\r\n" in the text, where ``splitlines(keepends=True)``
+    keeps it attached to its line and the rewrite carries it through untouched.
+    """
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
 def build_patches(findings: list[Finding], root: Path) -> list[FilePatch]:
     """Compute a patch per file from the fixable findings.
 
@@ -71,7 +88,7 @@ def build_patches(findings: list[Finding], root: Path) -> list[FilePatch]:
     for relative, file_findings in sorted(by_file.items()):
         path = root / relative if not Path(relative).is_absolute() else Path(relative)
         try:
-            original = path.read_text(encoding="utf-8")
+            original = _read_preserving_newlines(path)
         except OSError:
             continue
         lines = original.splitlines(keepends=True)
@@ -127,6 +144,10 @@ def apply_patches(patches: list[FilePatch]) -> list[Path]:
     for patch in patches:
         if not patch.changed:
             continue
-        patch.path.write_text(patch.patched, encoding="utf-8")
+        # newline="" writes the string's own separators verbatim instead of
+        # translating "\n" to os.linesep, which would corrupt a CRLF file on
+        # Windows and an LF file nowhere.
+        with patch.path.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(patch.patched)
         written.append(patch.path)
     return written

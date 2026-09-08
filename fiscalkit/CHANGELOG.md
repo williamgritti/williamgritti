@@ -96,6 +96,26 @@ only the human-readable values changed.
 Long remediation text also wraps to a hanging indent instead of running past 140
 columns, which is the part of a report a reader skips.
 
+### `--fix` rewrote every line of a Windows-authored file
+
+Applying a one-line fix to a file with CRLF endings converted the whole file to
+LF. `git diff --numstat` reported every line changed instead of one.
+
+`Path.read_text` opens in universal-newline mode, so CRLF came back as a bare LF
+in the string, and writing that string out again normalised the file. The
+emitted `--diff` had the same problem: its context lines carried normalised
+endings, so the hunk covered the entire file.
+
+This is the common case for the audience, not an exotic one. Brazilian
+enterprise codebases are full of CRLF, and the whole point of emitting a patch
+rather than a description is that a reviewer can see one line change. A patch
+that rewrites the file is worse than no patch.
+
+Reading and writing now preserve the separators verbatim, so a CRLF file stays
+CRLF, an LF file stays LF, and a UTF-8 BOM survives. Verified byte for byte and
+through `git apply`, which accepts the patch and leaves `numstat` at 1 line
+added, 1 removed.
+
 ### The agent-facing scanner reported success for paths that do not exist
 
 `escanear_projeto` answered `{"ok": true, ...}` with zero findings for any path

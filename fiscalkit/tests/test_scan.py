@@ -7,7 +7,7 @@ import re
 import pytest
 
 from fiscalkit.scan import RULES, scan_path, scan_text
-from fiscalkit.scan.fixer import apply_patches, build_patches
+from fiscalkit.scan.fixer import apply_patches, build_patches, unified_diff
 from fiscalkit.scan.rules import BREAKS, SEVERITY_ORDER, language_of
 
 LEGACY = "11222333000181"  # valid numeric CNPJ
@@ -880,3 +880,58 @@ def test_fix_works_when_the_target_is_a_single_file(tmp_path) -> None:
     assert "[0-9A-Z]{12}[0-9]{2}" in rewritten
     assert "\\d{14}" not in rewritten
     assert not scan_path(target).findings
+
+
+def test_fix_preserves_line_endings_and_bom(tmp_path) -> None:
+    """`--fix` must change the line it targets and nothing else, byte for byte.
+
+    `Path.read_text` opens in universal-newline mode, so every CRLF came back as a
+    bare LF and writing the string out again rewrote the whole file. A one-line
+    regex fix in a Windows-authored tree then arrived as a diff touching every
+    line, which destroys the reviewability that is the entire point of emitting a
+    patch instead of a description. Brazilian enterprise codebases are full of
+    CRLF, so this was the common case, not an exotic one.
+    """
+    crlf = tmp_path / "win.py"
+    body = 'import re\r\nCNPJ_RE = re.compile(r"^\\d{14}$")\r\nOUTRA = 1\r\n'
+    crlf.write_bytes(b"\xef\xbb\xbf" + body.encode("utf-8"))
+
+    lf = tmp_path / "unix.py"
+    lf.write_bytes(b'import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n')
+
+    patches = build_patches(scan_path(tmp_path).findings, tmp_path)
+    assert len(patches) == 2, [p.path.name for p in patches]
+    apply_patches(patches)
+
+    after_crlf = crlf.read_bytes()
+    assert after_crlf.count(b"\r\n") == 3, "CRLF endings were rewritten"
+    assert after_crlf.count(b"\n") - after_crlf.count(b"\r\n") == 0, "a bare LF was introduced"
+    assert after_crlf.startswith(b"\xef\xbb\xbf"), "the BOM was dropped"
+    assert b"[0-9A-Z]{12}[0-9]{2}" in after_crlf, "the fix was not applied"
+    # Only the offending line may differ.
+    assert after_crlf.count(b"OUTRA = 1\r\n") == 1
+
+    after_lf = lf.read_bytes()
+    assert b"\r\n" not in after_lf, "CRLF was introduced into an LF file"
+    assert b"[0-9A-Z]{12}[0-9]{2}" in after_lf
+
+
+def test_emitted_diff_for_a_crlf_file_touches_one_line(tmp_path) -> None:
+    """The unified diff must carry the CR through, so the hunk stays one line.
+
+    A diff whose context lines have had their endings normalised does not apply
+    cleanly against the original file, and where it does apply it rewrites
+    everything it touches.
+    """
+    target = tmp_path / "win.py"
+    body = 'import re\r\nCNPJ_RE = re.compile(r"^\\d{14}$")\r\nOUTRA = 1\r\n'
+    target.write_bytes(body.encode("utf-8"))
+
+    patches = build_patches(scan_path(target).findings, target.parent)
+    diff = unified_diff(patches, target.parent)
+
+    added = [ln for ln in diff.splitlines(keepends=True) if ln.startswith("+") and ln[1:2] != "+"]
+    removed = [ln for ln in diff.splitlines(keepends=True) if ln.startswith("-") and ln[1:2] != "-"]
+    assert len(added) == 1, added
+    assert len(removed) == 1, removed
+    assert added[0].endswith("\r\n"), repr(added[0])
