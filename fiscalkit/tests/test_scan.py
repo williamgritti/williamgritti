@@ -636,3 +636,62 @@ def test_numeric_coercion_claim_distinguishes_nan_from_truncation() -> None:
     # Both spellings are still detected.
     assert "CNPJ004" in _ids("const n = Number(row.cnpj);", "javascript")
     assert "CNPJ004" in _ids("const n = parseInt(row.cnpj, 10);", "javascript")
+
+
+# ---------------------------------------------------------------------------
+# Schema and interface-definition formats
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("code", "language", "label"),
+    [
+        ("    cnpj:\n      type: integer", "yaml", "OpenAPI field typed integer"),
+        ('{"cnpj": {"type": "int64"}}', "json", "JSON Schema int64"),
+        ("int64 cnpj = 1;", "protobuf", "protobuf scalar field"),
+        ("  cnpj Int @unique", "prisma", "prisma model field"),
+        ("  cnpj Int", "prisma", "prisma field at end of line"),
+    ],
+)
+def test_schema_formats_are_covered(code: str, language: str, label: str) -> None:
+    """A CNPJ typed as an integer in a spec propagates into every generated stub.
+
+    These formats were unreachable before: `.proto`, `.prisma` and `.graphql`
+    were not recognised at all, and OpenAPI puts the type on its own line under
+    the field name, which no single-line rule could see.
+    """
+    assert scan_text(code, language=language), f"missed {label}"
+
+
+@pytest.mark.parametrize(
+    ("code", "language", "label"),
+    [
+        ("    quantidade:\n      type: integer", "yaml", "unrelated integer field"),
+        ('{"idade": {"type": "integer"}}', "json", "unrelated JSON Schema field"),
+        ("int64 order_id = 1;", "protobuf", "unrelated proto field"),
+        ("  id   Int  @id", "prisma", "unrelated prisma field"),
+        ('print("cnpj integer")', "python", "prose in a string literal"),
+        ('msg = "cnpj int"', "python", "another string literal"),
+        ("cnpj_int_helper()", "python", "identifier containing both words"),
+    ],
+)
+def test_schema_rules_do_not_fire_on_unrelated_declarations(
+    code: str, language: str, label: str
+) -> None:
+    """`print("cnpj integer")` is a sentence, not a field declaration.
+
+    CNPJ015 originally matched it, since prose puts the same two words together.
+    It now requires the shape of a declaration: end of line, an attribute, or
+    punctuation after the type, never a closing quote.
+    """
+    assert scan_text(code, language=language) == [], f"false positive on {label}"
+
+
+def test_new_formats_are_recognised() -> None:
+    for name, expected in [
+        ("schema.proto", "protobuf"),
+        ("schema.prisma", "prisma"),
+        ("api.graphql", "graphql"),
+        ("event.avsc", "json"),
+    ]:
+        assert language_of(name) == expected, name

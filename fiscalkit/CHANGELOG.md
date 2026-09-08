@@ -77,6 +77,28 @@ maintainers, and it is recorded here rather than quietly rewritten, because it
 is the same over-generalisation this project has now made four times: test a
 sample, state a universal.
 
+### Schema and interface-definition formats
+
+Testing the formats a Brazilian system actually carries found three gaps. An
+OpenAPI spec declaring `cnpj` with `type: integer` produced nothing, because the
+type sits on its own line under the field name and no single-line rule could see
+both. `.proto`, `.prisma` and `.graphql` were not recognised at all, so
+`int64 cnpj = 1;` was never read.
+
+These matter more than an equivalent line of application code: a CNPJ typed as
+an integer in a specification propagates into every generated client, server
+stub and validator, so one line becomes the same defect in several languages.
+
+Added `CNPJ014` for the type-on-its-own-line case, context-gated, and `CNPJ015`
+for `cnpj Int` with only whitespace between name and type, which Prisma and IDLs
+use. `.proto`, `.prisma`, `.graphql`, `.gql` and `.avsc` are now read.
+
+`CNPJ015` first matched `print("cnpj integer")`, since prose puts the same two
+words together. It now requires the shape of a declaration -- end of line, an
+attribute, or punctuation after the type, never a closing quote. Re-measured
+after the change: zero false positives across 3,234 third-party files and 240
+files of Brazilian npm packages.
+
 ### The coercion rule now distinguishes NaN from silent truncation
 
 `CNPJ004` matches `Number`, `isNaN`, `ctype_digit`, `parseFloat` and `parseInt`,

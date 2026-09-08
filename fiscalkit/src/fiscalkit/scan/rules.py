@@ -82,6 +82,13 @@ EXTENSIONS = {
     ".xml": "xml",
     ".html": "html",
     ".vue": "javascript",
+    # Schema and interface-definition formats. A CNPJ typed as an integer in one
+    # of these propagates the defect into every generated client and stub.
+    ".proto": "protobuf",
+    ".graphql": "graphql",
+    ".gql": "graphql",
+    ".prisma": "prisma",
+    ".avsc": "json",
 }
 
 
@@ -265,6 +272,43 @@ RULES: tuple[Rule, ...] = (
         ),
         fix="Map each character with ord(c) - 48, which reproduces the legacy numeric "
         "result exactly, so one code path serves both formats.",
+    ),
+    Rule(
+        id="CNPJ014",
+        title="CNPJ typed as an integer in a schema or API spec",
+        severity=BREAKS,
+        # OpenAPI, JSON Schema and Avro put the type on its own line under the
+        # field name, so this is keyed on the type and gated on nearby context
+        # rather than trying to match both on one line.
+        pattern=_c(r"[\"']?type[\"']?\s*[:=]\s*[\"']?(?:integer|number|int32|int64|long)\b"),
+        needs_cnpj_context=True,
+        explanation=(
+            "A CNPJ declared as an integer in a specification does not stay in the "
+            "specification: every generated client, server stub and validator "
+            "inherits it, so one line here becomes the same defect in several "
+            "languages at once."
+        ),
+        fix="Type it as a string with a maxLength of 14. Keep any pattern "
+        "constraint alphanumeric: ^[0-9A-Z]{12}[0-9]{2}$.",
+    ),
+    Rule(
+        id="CNPJ015",
+        title="CNPJ declared as an integer field without a separator",
+        severity=BREAKS,
+        # Prisma, Protobuf IDL and Go struct tags write `cnpj Int` with only
+        # whitespace between name and type, which the assignment forms miss.
+        # The trailing exclusion keeps prose out. A declaration is followed by end
+        # of line, an attribute, or punctuation; `print("cnpj integer")` is
+        # followed by a quote, and is a sentence rather than a field.
+        pattern=_c(
+            r"(?<![\w.])cnpj\w*\s+(?:big)?int(?:eger|32|64)?\b"
+            r"(?!\s*\()(?!\s*[\"'`])(?=\s*(?:$|[@?\[\],;:=)]|\w))"
+        ),
+        explanation=(
+            "An integer field type carries into the generated schema and the "
+            "database column behind it."
+        ),
+        fix="Declare it as a string or varchar of length 14.",
     ),
     Rule(
         id="CNPJ023",

@@ -122,8 +122,9 @@ repos:
       - id: cnpj-2026
 ```
 
-Twelve rules across Python, JavaScript/TypeScript, SQL, Java, PHP, Go, C# and
-Ruby. Dependency directories are pruned and commented-out code is ignored,
+14 rules across Python, JavaScript/TypeScript, SQL, Java, PHP, Go, C#, Ruby,
+plus the schema formats that generate them: OpenAPI/JSON Schema, Protobuf,
+Prisma and GraphQL. Dependency directories are pruned and commented-out code is ignored,
 because a scanner that cries wolf gets muted after one run.
 
 ---
@@ -296,7 +297,7 @@ That is a genuine recommendation, not false modesty.
 | **CNPJ** | numeric **and** alphanumeric (2026), root/branch, check-digit generation |
 | **Access key** | full 44-digit decode, validation, DANFE-style formatting |
 | **NF-e XML** | `nfeProc` / `NFe` / `infNFe` roots, items, taxes across CST variants, totals, protocol |
-| **2026 scanner** | 12 rules over 8 languages finding code that breaks on alphanumeric CNPJs |
+| **2026 scanner** | 14 rules over 8 languages plus OpenAPI, Protobuf, Prisma and GraphQL |
 | **CFOP** | direction and scope classification |
 | **UF** | all 27 IBGE codes, lookup by code or acronym |
 
