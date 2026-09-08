@@ -151,6 +151,12 @@ Post on dev.to, Medium or your own site first, so everything else can link to it
 > que interessa.
 >
 > Julho de 2026 não vai ser adiado por você não ter olhado.
+>
+> ---
+>
+> *A ferramenta é MIT e vai continuar sendo. Se ela te poupou uma tarde de
+> `grep`, tem um [Ko-fi](https://ko-fi.com/SEU_HANDLE) aqui — sem paywall, sem
+> versão pro, sem newsletter.*
 
 ---
 
@@ -274,5 +280,11 @@ Link na bio. #cnpj #devbr #python #fiscal #ir2026
   wrong, unfair to its maintainers, and checkable in seconds. I made exactly that
   mistake here before running the option.
 - Do not lead with consulting. Lead with the finding; the work follows from it.
+- **The Ko-fi line goes in the article only.** Not on r/brdev, where a donation
+  ask on a first post reads as self-promotion and costs you the thread that was
+  the whole point. Not on LinkedIn, where the call to action is already the
+  conversation. The article is your own turf and a footer there is unremarkable.
+- Replace `SEU_HANDLE` before posting, or delete the line. A Ko-fi link that
+  404s in front of the only audience that matters is worse than no link.
 - Do not post before the package installs. A broken `pip install` in front of the
   only audience that matters is not recoverable in the same news cycle.

@@ -142,6 +142,14 @@ whose accounts exist.
 
 Donations on a new library are a trickle. They are not the plan; section 7 is.
 
+**But a trickle is the fastest thing here that is not zero.** Ko-fi is the only
+rail that lands in a linked PayPal account immediately, with no payout delay and
+no cut on donations, so it is the shortest distance between publishing and a real
+payment. The article in `LAUNCH.md` carries a one-line Ko-fi footer with
+`SEU_HANDLE` as a placeholder — create the account, link PayPal, replace the
+placeholder, or delete the line. It is deliberately absent from the r/brdev and
+LinkedIn versions; the reason is in that file's "what not to do".
+
 ---
 
 ## 6. Two things I got wrong, so you do not repeat them
