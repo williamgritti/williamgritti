@@ -146,7 +146,14 @@ RULES: tuple[Rule, ...] = (
             r"(?<![\w.])(?:ctype_digit|is_numeric|isNaN|Number|parseInt|parseFloat)"
             r"\s*\(\s*[^)]*cnpj"
         ),
-        explanation=("Numeric coercion of a CNPJ yields NaN or false once letters are legal."),
+        explanation=(
+            "Numeric coercion of a CNPJ fails once letters are legal, and the two "
+            "ways it fails are not equally survivable. Number() and isNaN() give "
+            "NaN, and ctype_digit() gives false, which are loud. parseInt() "
+            "truncates at the first letter and returns a plausible number: "
+            "parseInt('12ABC34501DE35', 10) is 12. That reaches a database as a "
+            "valid-looking value and is discovered much later, if at all."
+        ),
         fix="Treat the CNPJ as an opaque string. It is an identifier, never a quantity.",
     ),
     # -- Numeric storage and casting --------------------------------------

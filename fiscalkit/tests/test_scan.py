@@ -617,3 +617,22 @@ def test_numeric_column_claim_matches_observed_database_behaviour() -> None:
     lowered = rule.explanation.lower()
     assert "reject" in lowered
     assert "text" in lowered and "sqlite" in lowered
+
+
+def test_numeric_coercion_claim_distinguishes_nan_from_truncation() -> None:
+    """CNPJ004 matches both `Number()` and `parseInt()`, which fail differently.
+
+    `Number("12ABC34501DE35")` is NaN, which is loud. `parseInt` on the same value
+    returns 12 -- a plausible number that reaches a database and is discovered much
+    later. An earlier version of this rule promised NaN for both, which would have
+    told a reader using `parseInt` to expect a failure they will never see.
+    """
+    rule = next(r for r in RULES if r.id == "CNPJ004")
+    lowered = rule.explanation.lower()
+    assert "nan" in lowered
+    assert "truncat" in lowered, "the silent parseInt case must be described"
+    assert "12" in rule.explanation, "the concrete truncated value earns its place"
+
+    # Both spellings are still detected.
+    assert "CNPJ004" in _ids("const n = Number(row.cnpj);", "javascript")
+    assert "CNPJ004" in _ids("const n = parseInt(row.cnpj, 10);", "javascript")

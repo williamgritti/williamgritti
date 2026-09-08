@@ -77,6 +77,18 @@ maintainers, and it is recorded here rather than quietly rewritten, because it
 is the same over-generalisation this project has now made four times: test a
 sample, state a universal.
 
+### The coercion rule now distinguishes NaN from silent truncation
+
+`CNPJ004` matches `Number`, `isNaN`, `ctype_digit`, `parseFloat` and `parseInt`,
+and told the reader that numeric coercion "yields NaN or false". Running each one
+shows that holds for every spelling except the most common:
+`parseInt("12ABC34501DE35", 10)` returns **12**, with no error and no NaN.
+
+That is the dangerous case and the old text denied it. A reader using `parseInt`
+was being told to expect a failure they will never see, while a plausible
+two-digit number reaches their database. The explanation now separates the loud
+failures from the silent one and quotes the truncated value.
+
 ### The numeric-column rule now describes what databases actually do
 
 `CNPJ011` said an integer column "cannot store" an alphanumeric CNPJ. Running it
