@@ -96,6 +96,29 @@ only the human-readable values changed.
 Long remediation text also wraps to a hanging indent instead of running past 140
 columns, which is the part of a report a reader skips.
 
+### Scanning a single file told the user there was nothing to fix
+
+`fiscalkit scan caminho/arquivo.py --fix` printed "nenhuma correção automática
+disponível para os achados" and changed nothing. The same file scanned through
+its directory was fixed correctly.
+
+`Path.relative_to` returns "." when a path is compared with itself, so a
+single-file scan reported every finding against ".". That reached further than
+the report: the JSON `arquivo` field, the SARIF `artifactLocation.uri` that
+GitHub anchors annotations on, and then `--fix`, where "." resolved back to the
+containing directory, the read raised `IsADirectoryError`, and the patch builder
+swallowed it along with genuinely unreadable files.
+
+The result was a confident wrong answer with no error anywhere: exactly the
+failure mode `CNPJ021` exists to catch in other people's code. The fallback
+branch written for this case was unreachable, and its own comment said it
+handled it.
+
+Paths are now anchored on the parent when the target is a file, so a single-file
+scan reads the same as that file found under a directory scan and the SARIF URI
+stays relative. Covered by tests on both the reported path and on `--fix`
+actually rewriting the file.
+
 ### The `Typing :: Typed` claim was not true
 
 `pyproject.toml` declared the ``Typing :: Typed`` classifier and the README

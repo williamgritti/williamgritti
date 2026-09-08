@@ -7,6 +7,7 @@ import re
 import pytest
 
 from fiscalkit.scan import RULES, scan_path, scan_text
+from fiscalkit.scan.fixer import apply_patches, build_patches
 from fiscalkit.scan.rules import BREAKS, SEVERITY_ORDER, language_of
 
 LEGACY = "11222333000181"  # valid numeric CNPJ
@@ -840,3 +841,42 @@ def test_package_ships_a_pep561_marker() -> None:
 
     marker = Path(fiscalkit.__file__).parent / "py.typed"
     assert marker.is_file(), f"PEP 561 marker missing at {marker}"
+
+
+def test_scanning_a_single_file_names_that_file(tmp_path) -> None:
+    """A single-file scan must report the file, not ".".
+
+    ``path.relative_to(base)`` is "." when they are the same path, so pointing the
+    scanner at a file used to produce a finding whose path named nothing. It was
+    not only cosmetic: the "." reached the SARIF ``artifactLocation.uri``, where a
+    relative path is what GitHub anchors its annotations on.
+    """
+    target = tmp_path / "fornecedor.py"
+    target.write_text('import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8")
+
+    result = scan_path(target)
+    assert result.findings, "the fixture must produce a finding for this to mean anything"
+    assert {f.path for f in result.findings} == {"fornecedor.py"}
+
+
+def test_fix_works_when_the_target_is_a_single_file(tmp_path) -> None:
+    """`--fix` on one file must rewrite it, not quietly decline.
+
+    The "." path resolved back to the containing directory, so reading the file to
+    patch it raised ``IsADirectoryError``, which the patch builder swallows along
+    with genuinely unreadable files. The CLI then told the user no automatic fix
+    was available for a finding that has one: a wrong answer delivered quietly,
+    which is precisely the failure this tool exists to find in other code.
+    """
+    target = tmp_path / "fornecedor.py"
+    target.write_text('import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8")
+
+    result = scan_path(target)
+    patches = build_patches(result.findings, target.parent)
+    assert patches, "a fixable finding on a single file must yield a patch"
+
+    apply_patches(patches)
+    rewritten = target.read_text(encoding="utf-8")
+    assert "[0-9A-Z]{12}[0-9]{2}" in rewritten
+    assert "\\d{14}" not in rewritten
+    assert not scan_path(target).findings

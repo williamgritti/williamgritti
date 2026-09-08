@@ -280,6 +280,15 @@ def scan_path(root: str | Path, *, prune: bool = True) -> ScanResult:
     """
     result = ScanResult()
     base = Path(root)
+    # Paths are reported relative to the directory being scanned. When the target
+    # is a single file, `path.relative_to(base)` is "." -- a path relative to
+    # itself names nothing -- so anchor on its parent and report the file's own
+    # name, exactly as a scan of that directory would. The "." leaked further than
+    # the report: `--fix` resolved it back to the directory, the read failed, and
+    # the CLI told the user no automatic fix was available for a finding that has
+    # one. A wrong answer delivered quietly, which is the thing this tool exists
+    # to find in other people's code.
+    anchor = base.parent if base.is_file() else base
     for path in _walk(base, prune=prune, pruned=result.pruned):
         language = language_of(path.name)
         if language is None:
@@ -296,10 +305,7 @@ def scan_path(root: str | Path, *, prune: bool = True) -> ScanResult:
         if any(len(line) > MAX_LINE_LENGTH for line in text.splitlines()):
             result.files_minified += 1
             continue
-        try:
-            display = str(path.relative_to(base))
-        except ValueError:  # pragma: no cover - root is a file
-            display = str(path)
+        display = str(path.relative_to(anchor))
         result.findings.extend(scan_text(text, path=display, language=language))
         result.files_scanned += 1
     return result
