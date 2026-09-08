@@ -22,17 +22,22 @@ gh repo create williamgritti/fiscalkit --public --source=. --push
 
 ## 2. Publish to PyPI (10 min)
 
-The wheel and sdist already build cleanly — this sandbox blocks `upload.pypi.org`,
-so the upload is the one step left.
+`fiscalkit/release.sh` does the whole thing. It creates its own virtualenv, runs
+all five gates, builds, and checks the artifacts before anything is uploaded. It
+never reads or prints a token — twine takes credentials from `~/.pypirc` or the
+`TWINE_*` environment variables.
 
 ```bash
-pip install build twine
-python -m build
-twine upload dist/*        # needs a PyPI API token
+cd fiscalkit
+./release.sh check      # gates only, changes nothing
+./release.sh testpypi   # rehearsal upload
+./release.sh publish    # the real one, behind a typed version confirmation
 ```
 
-Publish to TestPyPI first if you want a dry run. Once live, `pip install
-fiscalkit` works for everyone, and the README badge resolves.
+The name `fiscalkit` was free on PyPI as of this session. Publishing claims it.
+
+This sandbox blocks `upload.pypi.org`, which is the only reason the upload is
+still outstanding — everything up to it is verified green.
 
 ## 3. Turn on the funding rails (5 min)
 
