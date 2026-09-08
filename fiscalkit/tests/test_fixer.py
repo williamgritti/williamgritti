@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from fiscalkit.scan import RULES, scan_path
-from fiscalkit.scan.fixer import apply_patches, build_patches, unified_diff
+from fiscalkit.scan.fixer import FilePatch, apply_patches, build_patches, unified_diff
 
 LEGACY_VALIDATORS = (
     "import re\n"
@@ -79,8 +79,9 @@ def test_diff_is_in_git_apply_shape(project) -> None:
 
 def test_applying_resolves_the_fixable_findings_only(project) -> None:
     before = scan_path(project)
-    written = apply_patches(build_patches(before.findings, project))
-    assert len(written) == 3
+    applied = apply_patches(build_patches(before.findings, project))
+    assert len(applied.written) == 3
+    assert applied.ok, applied.failed
 
     after = scan_path(project)
     remaining = {f.rule_id for f in after.findings}
@@ -118,3 +119,91 @@ def test_patch_is_built_against_the_file_as_it_is_now(project) -> None:
     )
     patched = {Path(p.path).name for p in build_patches(findings, project)}
     assert "schema.sql" not in patched
+
+
+def test_a_failed_write_is_reported_and_does_not_abort_the_rest(tmp_path) -> None:
+    """One unwritable file must not cost the caller the record of the others.
+
+    Patches are written one at a time, so raising on the second of several left
+    the tree half-modified and the caller holding a traceback instead of the list
+    of what had already changed -- from a tool whose entire job is editing source
+    files. The scanner already treats an unreadable file as something to report
+    and carry on from; this asserts the write path matches it.
+    """
+    ok = tmp_path / "ok.py"
+    ok.write_text("x = 1\n", encoding="utf-8")
+
+    patches = [
+        FilePatch(path=ok, original="x = 1\n", patched="x = 2\n", rule_ids=("CNPJ001",)),
+        FilePatch(
+            path=tmp_path / "sem-tal-pasta" / "f.py",
+            original="a\n",
+            patched="b\n",
+            rule_ids=("CNPJ001",),
+        ),
+        # Ordered last on purpose: a failure in the middle must not skip it.
+        FilePatch(
+            path=tmp_path / "depois.py",
+            original="y = 1\n",
+            patched="y = 2\n",
+            rule_ids=("CNPJ001",),
+        ),
+    ]
+    (tmp_path / "depois.py").write_text("y = 1\n", encoding="utf-8")
+
+    applied = apply_patches(patches)
+
+    assert applied.ok is False
+    assert [p.name for p in applied.written] == ["ok.py", "depois.py"]
+    assert len(applied.failed) == 1
+    failed_path, reason = applied.failed[0]
+    assert failed_path.name == "f.py"
+    assert reason, "the failure must carry a reason the caller can print"
+
+    assert ok.read_text(encoding="utf-8") == "x = 2\n"
+    assert (tmp_path / "depois.py").read_text(encoding="utf-8") == "y = 2\n"
+
+
+def test_cli_fix_exits_non_zero_when_a_write_fails(tmp_path, capsys, monkeypatch) -> None:
+    """A partly rewritten tree must not report success to a build gate.
+
+    Isolating this needs care. A refused write leaves the finding in the tree, so
+    the re-scan still reports breakage and the CLI would exit 1 for that reason
+    alone -- a test that only asserts "exit 1" therefore passes with the guard
+    deleted, which is how the first version of this test was worthless. The
+    re-scan is stubbed clean so the ONLY thing that can produce a non-zero exit
+    is the failed write.
+    """
+    from fiscalkit import cli
+    from fiscalkit.scan.scanner import ScanResult
+
+    (tmp_path / "f.py").write_text(
+        'import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8"
+    )
+
+    real_scan = cli.scan_path
+    calls = {"n": 0}
+
+    def scan_then_pretend_clean(target, **kwargs):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return real_scan(target, **kwargs)
+        return ScanResult()  # the post-fix re-scan: nothing left to report
+
+    real_open = Path.open
+
+    def refuse_writes(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if args and args[0] == "w":
+            raise PermissionError(13, "Permission denied")
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(cli, "scan_path", scan_then_pretend_clean)
+    monkeypatch.setattr(Path, "open", refuse_writes)
+    exit_code = cli.main(["scan", str(tmp_path), "--fix"])
+    monkeypatch.undo()
+
+    captured = capsys.readouterr()
+    assert calls["n"] == 2, "the re-scan must have happened for this to be isolated"
+    assert "0 arquivo(s) alterado(s)" in captured.out
+    assert "não foi possível gravar" in captured.err
+    assert exit_code == 1, "a failed write must not exit 0 even when nothing remains"

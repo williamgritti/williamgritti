@@ -21,7 +21,7 @@ from pathlib import Path
 from .rules import RULES
 from .scanner import Finding
 
-__all__ = ["FilePatch", "apply_patches", "build_patches", "unified_diff"]
+__all__ = ["ApplyResult", "FilePatch", "apply_patches", "build_patches", "unified_diff"]
 
 _BY_ID = {rule.id: rule for rule in RULES}
 
@@ -133,21 +133,47 @@ def unified_diff(patches: list[FilePatch], root: Path) -> str:
     return "".join(chunks)
 
 
-def apply_patches(patches: list[FilePatch]) -> list[Path]:
-    """Write each patch to disk and return the paths changed.
+@dataclass(frozen=True, slots=True)
+class ApplyResult:
+    """What ``apply_patches`` managed to write, and what it could not."""
+
+    written: list[Path]
+    #: Path and the reason it could not be written, in the order encountered.
+    failed: list[tuple[Path, str]]
+
+    @property
+    def ok(self) -> bool:
+        """Whether every patch was written."""
+        return not self.failed
+
+
+def apply_patches(patches: list[FilePatch]) -> ApplyResult:
+    """Write each patch to disk and report what was written and what was not.
 
     No backups are written. This is a source tree under version control, and a
     tool that scatters ``.bak`` files beside the originals is a worse neighbour
     than one that trusts git.
+
+    A write that fails is collected rather than raised. Files are written one at
+    a time, so raising on the second of five left the tree half-modified and the
+    caller holding a traceback instead of the list of what had already changed --
+    from a tool whose entire job is editing source files. The scanner already
+    treats an unreadable file as something to report and carry on from; the write
+    path now matches it.
     """
     written: list[Path] = []
+    failed: list[tuple[Path, str]] = []
     for patch in patches:
         if not patch.changed:
             continue
-        # newline="" writes the string's own separators verbatim instead of
-        # translating "\n" to os.linesep, which would corrupt a CRLF file on
-        # Windows and an LF file nowhere.
-        with patch.path.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(patch.patched)
+        try:
+            # newline="" writes the string's own separators verbatim instead of
+            # translating "\n" to os.linesep, which would corrupt a CRLF file on
+            # Windows and an LF file nowhere.
+            with patch.path.open("w", encoding="utf-8", newline="") as handle:
+                handle.write(patch.patched)
+        except OSError as exc:
+            failed.append((patch.path, str(exc)))
+            continue
         written.append(patch.path)
-    return written
+    return ApplyResult(written=written, failed=failed)

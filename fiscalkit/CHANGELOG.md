@@ -96,6 +96,23 @@ only the human-readable values changed.
 Long remediation text also wraps to a hanging indent instead of running past 140
 columns, which is the part of a report a reader skips.
 
+### A failed write left the tree half-fixed and raised a traceback
+
+`apply_patches` wrote each file in turn with no error handling, so a write that
+failed part-way through -- a read-only file, a full disk, a vanished directory --
+raised out of the CLI as an unhandled `OSError`. Earlier files in the batch were
+already rewritten, and the caller was left with a stack trace instead of the list
+of what had changed, from a tool whose entire job is editing source files.
+
+The read path had been careful about exactly this: unreadable files are counted
+and skipped so one of them cannot abort a scan. The write path now matches. A
+failure is collected rather than raised, `apply_patches` returns an `ApplyResult`
+carrying both what was written and what was not, and the CLI prints each failure
+to stderr.
+
+The CLI also exits non-zero whenever a write failed, so a build gate never sees
+success over a partly applied fix.
+
 ### `--fix` rewrote every line of a Windows-authored file
 
 Applying a one-line fix to a file with CRLF endings converted the whole file to

@@ -183,14 +183,21 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             print(unified_diff(patches, root), end="")
             # A diff is a report, not a change; keep the gate semantics.
             return 1 if result.breaks else 0
-        changed = apply_patches(patches)
-        for path in changed:
+        applied = apply_patches(patches)
+        for path in applied.written:
             print(f"corrigido {path}")
+        for path, motivo in applied.failed:
+            print(f"erro: não foi possível gravar {path}: {motivo}", file=sys.stderr)
         remaining = scan_path(target, prune=not args.incluir_tudo)
         print(
-            f"{len(changed)} arquivo(s) alterado(s); "
+            f"{len(applied.written)} arquivo(s) alterado(s); "
             f"{len(remaining.findings)} ocorrência(s) restante(s) para revisão humana"
         )
+        # A tree that was only partly rewritten must never exit 0. The files that
+        # did get written are already changed, so reporting success here would
+        # hand a build gate a green light over a half-applied fix.
+        if applied.failed:
+            return 1
         return 1 if remaining.breaks else 0
 
     if fmt == "sarif":
