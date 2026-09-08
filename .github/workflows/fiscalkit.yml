@@ -61,6 +61,35 @@ jobs:
           python -m fiscalkit.cli chave 43240311222333000181550010000001231000000010
           python -m fiscalkit.cli cnpj 12ABC34501DE35
 
+  test-mcp-1x:
+    name: tests (mcp 1.x)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The server supports both SDK generations behind a runtime import
+      # fallback, since FastMCP was renamed MCPServer in 2.0. The default extra
+      # resolves to 2.x, so without this job the 1.x half of that claim is
+      # never executed anywhere.
+      - name: Install with the 1.x SDK pinned
+        run: |
+          pip install -e '.[dev]'
+          pip install 'mcp<2'
+      - name: Confirm the 1.x class is what resolves
+        run: |
+          python -c "
+          from fiscalkit.mcp.server import _server_class
+          cls = _server_class()
+          assert cls.__name__ == 'FastMCP', cls
+          print('resolved', cls.__module__ + '.' + cls.__name__)
+          "
+      - name: Test
+        run: pytest
+      - name: Types
+        run: mypy src/fiscalkit
+
   quality:
     name: lint, format, types
     runs-on: ubuntu-latest

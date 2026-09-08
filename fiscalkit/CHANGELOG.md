@@ -48,6 +48,21 @@ First release.
 - **MCP server** (`fiscalkit-mcp`) exposing eight tools to AI agents, returning
   structured failure payloads rather than raising.
 
+### Verified the remaining documented claims
+
+- **`mcp` 1.x support was claimed but never executed.** The optional extra
+  resolves to 2.x, so the 1.x half of the import fallback had never run
+  anywhere. Installed `mcp<2` (1.30.0) and confirmed `_server_class()` resolves
+  to `FastMCP`, ten tools register, `call_tool` round-trips, and the full suite
+  and `mypy --strict` pass. CI now has a job that pins the 1.x SDK, so the claim
+  stays true rather than being true by accident.
+- **The pre-commit hook had never been run through pre-commit.** Validated the
+  manifest against pre-commit's own schema and executed the hook in a real git
+  repository: it fails with a readable diagnostic on a project with breakage and
+  passes on a clean one. Both manifests are now covered by tests, including that
+  the Action's scan steps tolerate a non-zero exit, which is the bug that would
+  otherwise return the moment anyone edits that file.
+
 ### Made the multi-language claim true
 
 The README claimed twelve rules across eight languages, but the rules had only

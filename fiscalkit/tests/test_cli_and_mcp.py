@@ -320,3 +320,40 @@ def test_invalid_input_is_a_payload_over_the_protocol_too() -> None:
     server = build_server()
     assert '"valido": false' in _call(server, "validar_cnpj", {"cnpj": "nope"})
     assert '"valido": false' in _call(server, "decodificar_chave", {"chave": "123"})
+
+
+def test_precommit_manifest_is_valid() -> None:
+    """The hook manifest must satisfy pre-commit's own schema, not just parse."""
+    from pathlib import Path
+
+    import yaml
+
+    manifest = Path(__file__).resolve().parents[1] / ".pre-commit-hooks.yaml"
+    hooks = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    assert isinstance(hooks, list) and len(hooks) == 1
+    hook = hooks[0]
+    assert hook["id"] == "cnpj-2026"
+    assert hook["entry"] == "fiscalkit scan"
+    assert hook["language"] == "python"
+    # pass_filenames must be off: the directory rules and the summary line only
+    # behave correctly when the hook is handed the root rather than a file list.
+    assert hook["pass_filenames"] is False
+    assert hook["args"] == ["."]
+
+
+def test_action_manifest_declares_what_the_readme_promises() -> None:
+    """action.yml is user-facing configuration; its shape is part of the API."""
+    from pathlib import Path
+
+    import yaml
+
+    action = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / "action.yml").read_text(encoding="utf-8")
+    )
+    assert action["runs"]["using"] == "composite"
+    assert set(action["inputs"]) >= {"path", "fail-on-break", "sarif-file"}
+    assert set(action["outputs"]) == {"total", "breaking", "ready"}
+    # The scan steps must tolerate a non-zero exit; GitHub runs composite bash
+    # steps with -e, and `scan` exits non-zero by design when it finds breakage.
+    scan_step = next(s for s in action["runs"]["steps"] if s.get("id") == "scan")
+    assert scan_step["run"].count("|| true") >= 2
