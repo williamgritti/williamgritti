@@ -45,10 +45,11 @@ XML parsed without pulling in a code-generated schema stack.
 ## The 2026 problem nobody is scanning for
 
 From July 2026, *IN RFB nº 2.229/2024* allows letters in the first twelve
-positions of a CNPJ. Most validation libraries already handle it — of five tested
-by execution, `brutils`, `validate-docbr`, `cpf-cnpj-validator` and
-`validation-br` all agree with `fiscalkit` on every edge case, while
-`@brazilian-utils/brazilian-utils` 2.3.0 still rejects a valid alphanumeric CNPJ.
+positions of a CNPJ. Validation libraries already handle it — all five tested by
+execution agree with `fiscalkit` on every edge case: `brutils`,
+`validate-docbr`, `cpf-cnpj-validator`, `validation-br`, and
+`@brazilian-utils/brazilian-utils`, the last requiring `{ version: 2 }` since its
+default stays numeric for backwards compatibility.
 
 **That is not where systems break.** They break in the code *around* the
 validator, none of which a dependency upgrade touches:

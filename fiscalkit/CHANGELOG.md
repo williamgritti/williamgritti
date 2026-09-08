@@ -62,12 +62,20 @@ of it. The same false all-clear as the `site-packages` bug, by another route.
   A finding on line 1 of a one-line bundle is unactionable: the excerpt is a
   slice of an enormous line and the fix belongs in source that lives elsewhere.
 
-That scan also corrected a claim of this project's own documentation. Of five
-validation libraries tested by execution, four handle the alphanumeric CNPJ
-(`brutils`, `validate-docbr`, `cpf-cnpj-validator`, `validation-br`) and one
-does not: **`@brazilian-utils/brazilian-utils` 2.3.0 returns `false` for a valid
-alphanumeric CNPJ.** The blanket "the libraries are already ready" was drawn from
-Python packages alone and is now stated per library.
+That scan also corrected, then re-corrected, a claim in this project's own
+documentation. All five validation libraries tested by execution support the
+alphanumeric CNPJ: `brutils` and `validate-docbr` in Python;
+`cpf-cnpj-validator`, `validation-br` and `@brazilian-utils/brazilian-utils` in
+JavaScript. The last gates it behind `{ version: 2 }` and defaults to
+numeric-only for backwards compatibility, so its default rejects an alphanumeric
+CNPJ while the library validates one correctly, negative cases included, once
+the option is passed.
+
+An intermediate version of this changelog reported that library as not
+2026-ready, having tested only its default. That was wrong and unfair to its
+maintainers, and it is recorded here rather than quietly rewritten, because it
+is the same over-generalisation this project has now made four times: test a
+sample, state a universal.
 
 ### Verified the remaining documented claims
 
