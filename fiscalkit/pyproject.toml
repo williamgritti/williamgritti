@@ -45,6 +45,10 @@ Homepage = "https://github.com/williamgritti/fiscalkit"
 Repository = "https://github.com/williamgritti/fiscalkit"
 Issues = "https://github.com/williamgritti/fiscalkit/issues"
 Changelog = "https://github.com/williamgritti/fiscalkit/blob/main/CHANGELOG.md"
+# PyPI renders these as sidebar links. Someone who finds the package there
+# rather than on GitHub otherwise has no way back to a person.
+Discussions = "https://github.com/williamgritti/fiscalkit/discussions"
+Author = "https://github.com/williamgritti"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fiscalkit"]

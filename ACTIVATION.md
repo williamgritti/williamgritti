@@ -11,6 +11,38 @@ public *handles* (Ko-fi, PayPal.Me), never an email address, anywhere public.
 
 ---
 
+## Read this first: the PayPal address is already public
+
+Your profile README publishes a `mailto:` badge for the same address the PayPal
+account uses. Line 94 of `README.md` in this repository, rendered as the "leave a
+message" button on `github.com/williamgritti`.
+
+I did not touch it. It is your profile, the badge is clearly deliberate, and
+people may already be writing to it. But you asked me to keep the payment details
+safe, and a publicly indexed address that is also a PayPal login is worth a
+deliberate decision rather than an accident:
+
+- It is the first ingredient of a targeted phishing lure. "Payment received",
+  "your account is limited", addressed to an address the sender knows is on
+  PayPal, is far more convincing than a blind spray.
+- It ties the payment account to a public identity permanently. Scrapers have
+  had it for as long as the badge has existed; deleting it now does not recall it.
+
+**The fix costs about five minutes and does not require removing the badge.**
+PayPal supports several addresses on one account. Add a separate one, make it
+primary, and leave the published address either off the account entirely or as a
+secondary you do not use to log in. Then the public address stops being a
+credential.
+
+Whatever you decide, do it before the launch in section 4 — that is the step that
+takes the profile from low traffic to the front page of r/brdev.
+
+Nothing in this repository contains a payment address, and nothing added during
+this session does. The launch posts, the README's contact section and the PyPI
+sidebar all point at the handle `@williamgritti`, never at an email.
+
+---
+
 ## Do these in order
 
 The order matters. Posting before the package installs wastes the only launch you
@@ -26,10 +58,21 @@ cd fiscalkit
 git init && git add -A
 git commit -m "fiscalkit 0.1.0"
 gh repo create williamgritti/fiscalkit --public --source=. --push
+gh repo edit williamgritti/fiscalkit --enable-discussions
 ```
+
+**Discussions has to be on.** The README and the PyPI sidebar both point at it as
+the way a prospect reaches you without opening a public bug report, and the link
+404s until it is enabled.
 
 Once it moves, `fiscalkit/.github/workflows/ci.yml` starts running on its own and
 the root `.github/workflows/fiscalkit.yml` in the profile repo can be deleted.
+
+Make sure the contact link in your GitHub profile actually resolves to something
+you read. The README's closing section sends commercial questions to
+`github.com/williamgritti`, and that is the whole conversion path — the scanner
+finds the problem, and the profile is where someone goes to ask who fixes it.
+**Never publish a payment address or an email there; a handle is enough.**
 
 ### 2. Publish to PyPI — 10 min
 
@@ -75,6 +118,11 @@ next morning, Instagram after.
 
 **Answer every comment in the first 48 hours.** On r/brdev that is where
 credibility is won, and the questions tell you which rule to write next.
+
+Add one line to your profile README linking `fiscalkit`. It is the highest-traffic
+page you own and currently does not mention the project at all — I left it alone
+because it is your voice, not mine, but a reader who arrives from a post and
+finds no trace of the project on your profile has hit a dead end.
 
 Read the "what not to do" section at the bottom of `LAUNCH.md` before posting.
 The short version: never claim another library is unprepared for the 2026 CNPJ.

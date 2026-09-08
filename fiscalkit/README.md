@@ -348,6 +348,20 @@ authorities reconcile to the cent.
 Issues and PRs welcome. If you hit an NF-e this fails to parse, open an issue
 with the smallest XML that reproduces it — with real identifiers redacted.
 
+## Rodou o scanner e apareceu coisa demais?
+
+Se `fiscalkit scan` encontrou dezenas de ocorrências no seu sistema, a parte
+difícil não é a regex: é a coluna do banco, o backfill e as chaves estrangeiras
+que apontam pra ela. Isso precisa começar bem antes de junho de 2026.
+
+Abra uma [issue](https://github.com/williamgritti/fiscalkit/issues) ou uma
+[discussion](https://github.com/williamgritti/fiscalkit/discussions) descrevendo
+o tamanho do estrago — quantas ocorrências, em quantos repositórios, e se o CNPJ
+está em coluna numérica. Dá pra responder o que é urgente e o que pode esperar.
+
+Para conversar em particular sobre migração, o contato está no perfil:
+[@williamgritti](https://github.com/williamgritti).
+
 ## Development
 
 ```bash
@@ -355,7 +369,7 @@ git clone https://github.com/williamgritti/fiscalkit
 cd fiscalkit
 pip install -e '.[dev,mcp]'
 
-pytest              # 235 core; 248 with the mcp extra and the reference libs
+pytest              # totals vary by extra; the suite prints its own
 ruff check src tests
 mypy src/fiscalkit  # strict
 ```
