@@ -624,3 +624,25 @@ def test_fix_respects_pruning_when_counting_what_remains(tmp_path, capsys) -> No
     )
     # And the vendored file must be untouched.
     assert "\\d{14}" in (tmp_path / "node_modules" / "dep.js").read_text(encoding="utf-8")
+
+
+def test_readme_has_no_relative_links_because_it_is_the_pypi_page() -> None:
+    """`pyproject.toml` sets readme = "README.md", so this file IS the PyPI page.
+
+    PyPI does not resolve relative links against the repository, so `](LICENSE)`
+    renders as a link to pypi.org/project/fiscalkit/LICENSE and 404s. The badge
+    images were absolute and displayed correctly, which is exactly why nobody
+    would notice that their link targets were not.
+    """
+    import re
+    from pathlib import Path
+
+    import fiscalkit
+
+    readme = Path(fiscalkit.__file__).resolve().parents[2] / "README.md"
+    if not readme.is_file():
+        pytest.skip("README is not on disk beside the package")
+
+    # Markdown links whose target is neither absolute nor an intra-page anchor.
+    relative = re.findall(r"\]\((?!https?://|#|mailto:)([^)]+)\)", readme.read_text("utf-8"))
+    assert not relative, f"relative links break on the PyPI page: {relative}"

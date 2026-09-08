@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/williamgritti/fiscalkit/actions/workflows/ci.yml/badge.svg)](https://github.com/williamgritti/fiscalkit/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://pypi.org/project/fiscalkit/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Typed](https://img.shields.io/badge/mypy-strict-brightgreen)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/williamgritti/fiscalkit/blob/main/LICENSE)
+[![Typed](https://img.shields.io/badge/mypy-strict-brightgreen)](https://github.com/williamgritti/fiscalkit/blob/main/pyproject.toml)
 
 Validate CPF and CNPJ, decode NF-e access keys without calling SEFAZ, and parse
 NF-e XML into typed objects with `Decimal` money. Zero runtime dependencies.
@@ -291,7 +291,7 @@ still validate. Keys ending in any other digit do catch every single-digit
 substitution.
 
 This library documents that rather than papering over it, and the property is
-[pinned by a test](tests/test_chave.py). If you need authenticity rather than
+[pinned by a test](https://github.com/williamgritti/fiscalkit/blob/main/tests/test_chave.py). If you need authenticity rather than
 typo-detection, you need the issuer's digital signature or a SEFAZ query — not
 the check digit.
 
@@ -376,7 +376,7 @@ mypy src/fiscalkit  # strict
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/williamgritti/fiscalkit/blob/main/LICENSE).
 
 ---
 
