@@ -61,6 +61,17 @@ gh repo create williamgritti/fiscalkit --public --source=. --push
 gh repo edit williamgritti/fiscalkit --enable-discussions
 ```
 
+No `gh`, or not logged in? Create the empty repository at
+<https://github.com/new> (public, no README, no .gitignore, no licence — the
+files are already here), turn Discussions on under Settings → General →
+Features, then:
+
+```bash
+git branch -M main
+git remote add origin https://github.com/williamgritti/fiscalkit.git
+git push -u origin main
+```
+
 **Discussions has to be on.** The README and the PyPI sidebar both point at it as
 the way a prospect reaches you without opening a public bug report, and the link
 404s until it is enabled.
@@ -79,6 +90,28 @@ finds the problem, and the profile is where someone goes to ask who fixes it.
 `release.sh` does all of it: its own virtualenv, all five gates, build, and
 `twine check` before anything uploads. It never reads or prints a token — twine
 takes credentials from `~/.pypirc` or `TWINE_*`.
+
+**Get the credential first, or the upload fails at the last step.** PyPI's own
+help page states plainly that "Two-factor authentication is required on your PyPI
+account", and gives the upload recipe: username `__token__`, password the token
+value including its `pypi-` prefix. Create the token at
+<https://pypi.org/manage/account/token/>, scope it to "Entire account" for the
+first upload — the project does not exist yet, so a project-scoped token cannot
+be made until after it does — and put it in `~/.pypirc`:
+
+```ini
+[pypi]
+username = __token__
+password = pypi-AgEIcHlwaS5vcmc...
+```
+
+`chmod 600 ~/.pypirc`. The token is a password: it goes in that file or in
+`TWINE_PASSWORD`, never in a command line, a commit, or a screenshot.
+
+`./release.sh testpypi` is optional and needs a **separate** account and token
+at <https://test.pypi.org> — the two sites share no logins. Skip it if you would
+rather not create a second account; `./release.sh check` already runs every gate
+the real upload will.
 
 ```bash
 cd fiscalkit
