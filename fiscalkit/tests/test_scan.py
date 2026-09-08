@@ -502,3 +502,18 @@ def test_idiomatic_breakage_is_caught_in_every_claimed_language(
 def test_widened_rules_did_not_lose_precision(code: str, label: str) -> None:
     """Widening for other languages must not start flagging unrelated code."""
     assert scan_text(code, language="python") == [], f"false positive on {label}"
+
+
+def test_prose_quoting_a_pattern_is_reported() -> None:
+    """A docstring describing a numeric CNPJ rule is reported, by design.
+
+    The scanner reads lines rather than parsing each of eight languages, so it
+    cannot distinguish a regex in code from one quoted in a docstring. Rather
+    than suppress the class, this is left as a finding: documentation that
+    describes a numeric-only CNPJ rule usually deserves the same review as code
+    that implements one. `fiscalkit`'s own rules module reports for this reason.
+    """
+    docstring = '"""Finds a ^\\d{14}$ regex used to validate a cnpj."""'
+    assert "CNPJ001" in _ids(docstring)
+    # A `#` comment is still skipped -- that is a separate, deliberate rule.
+    assert scan_text("# a ^\\d{14}$ regex for cnpj", language="python") == []

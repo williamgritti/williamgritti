@@ -4,6 +4,13 @@ Precision is the whole design constraint. A scanner that reports a hundred
 maybes gets muted after the first run, so context-dependent rules only fire when
 ``cnpj`` appears nearby, comment-only lines are skipped, and every finding names
 the fix rather than only the problem.
+
+One deliberate consequence: a docstring or string literal that quotes a pattern
+near the word ``cnpj`` is reported, because the scanner reads lines rather than
+parsing each language. Documentation describing a numeric-only CNPJ rule is
+usually worth the same look as the code implementing one, so this is left as a
+finding rather than suppressed. ``fiscalkit`` reports its own rules module for
+exactly this reason.
 """
 
 from __future__ import annotations

@@ -107,6 +107,92 @@ jobs:
       - name: Types
         run: mypy src/fiscalkit
 
+  action:
+    name: dogfood the action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The action has only ever been exercised by simulating its shell. That
+      # does not cover inputs, ${{ }} interpolation, $GITHUB_OUTPUT parsing or
+      # composite step semantics -- all places this can break silently.
+      - name: Run against a fixture with known breakage
+        id: broken
+        uses: ./fiscalkit
+        with:
+          path: fiscalkit/tests/fixtures/legacy_project
+          version: ./fiscalkit
+          fail-on-break: "false"
+          sarif-file: broken.sarif
+
+      - name: Assert the outputs match what the fixture contains
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "total=${{ steps.broken.outputs.total }} breaking=${{ steps.broken.outputs.breaking }} ready=${{ steps.broken.outputs.ready }}"
+          [ "${{ steps.broken.outputs.total }}"    = "3" ]
+          [ "${{ steps.broken.outputs.breaking }}" = "3" ]
+          [ "${{ steps.broken.outputs.ready }}"    = "false" ]
+
+      - name: Assert the SARIF is valid and points at the right lines
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          d = json.load(open("broken.sarif"))
+          assert d["version"] == "2.1.0", d["version"]
+          run = d["runs"][0]
+          assert run["tool"]["driver"]["name"] == "fiscalkit"
+          results = run["results"]
+          assert len(results) == 3, len(results)
+          assert all(r["level"] == "error" for r in results), results
+          uris = {r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for r in results}
+          assert uris == {"fornecedor.py", "schema.sql"}, uris
+          print("SARIF ok:", len(results), "results across", len(uris), "files")
+          PY
+
+      # fail-on-break defaults to true, so this step must fail. continue-on-error
+      # captures that without failing the job, and the outcome is asserted.
+      - name: Run with fail-on-break enabled (expected to fail)
+        id: strict
+        continue-on-error: true
+        uses: ./fiscalkit
+        with:
+          path: fiscalkit/tests/fixtures/legacy_project
+          version: ./fiscalkit
+          sarif-file: strict.sarif
+
+      - name: Assert it failed the step rather than passing quietly
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "outcome=${{ steps.strict.outcome }}"
+          [ "${{ steps.strict.outcome }}" = "failure" ]
+
+      # Not src/ as a whole: rules.py quotes ^\d{14}$ in its module docstring
+      # while explaining what it detects, so the scanner reports itself there.
+      # Prose that quotes a pattern near the word "cnpj" is worth a human look,
+      # so that match is defensible rather than a bug. This step points at code
+      # that handles CNPJs instead of describing the patterns.
+      - name: Run against a clean subtree (expected clean)
+        id: clean
+        uses: ./fiscalkit
+        with:
+          path: fiscalkit/src/fiscalkit/documents
+          version: ./fiscalkit
+          sarif-file: clean.sarif
+
+      - name: Assert a clean tree reports ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.clean.outputs.breaking }}" = "0" ]
+          [ "${{ steps.clean.outputs.ready }}"    = "true" ]
+
   package:
     name: build and install
     runs-on: ubuntu-latest
