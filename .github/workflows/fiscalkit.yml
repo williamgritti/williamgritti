@@ -165,6 +165,47 @@ jobs:
           [ "${{ steps.broken.outputs.breaking }}" = "3" ]
           [ "${{ steps.broken.outputs.ready }}"    = "false" ]
 
+      # The action writes its own reports. If one lands inside the tree it is
+      # about to scan, the next scan reads it: the summary then lists findings
+      # in fiscalkit's own output and contradicts the count in its own header.
+      # `path` defaults to ".", so this is the DEFAULT configuration, and it is
+      # invisible to every assertion above because they scan a subdirectory.
+      - name: Assert the action does not scan its own reports
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          mkdir -p "$work/app"
+          printf 'import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n' > "$work/app/f.py"
+
+          export RUNNER_TEMP="$(mktemp -d)"
+          cd "$work"
+
+          # Exactly what the composite step does, with path defaulted to ".".
+          report="${RUNNER_TEMP}/fiscalkit-report.json"
+          text_report="${RUNNER_TEMP}/fiscalkit-report.txt"
+          export REPORT="$report"
+          fiscalkit scan . --format sarif > fiscalkit.sarif || true
+          fiscalkit scan . --json > "$report" || true
+          fiscalkit scan . > "$text_report" || true
+
+          header=$(python -c "import json,os;print(json.load(open(os.environ['REPORT']))['total'])")
+          listed=$(grep -c '^QUEBRA\|^RISCO \|^REVER ' "$text_report" || true)
+          echo "header=$header listed=$listed"
+          [ "$header" = "$listed" ] || {
+            echo "the summary header and its listing disagree -- a report was scanned"
+            cat "$text_report"
+            exit 1
+          }
+
+          # And nothing reported may live in a file the action itself wrote.
+          python - <<'PY'
+          import json, os
+          data = json.load(open(os.environ["REPORT"]))
+          bad = [o["arquivo"] for o in data["ocorrencias"] if "fiscalkit-report" in o["arquivo"]]
+          assert not bad, f"the action scanned its own report: {bad}"
+          PY
+
       - name: Assert the SARIF is valid and points at the right lines
         shell: bash
         run: |

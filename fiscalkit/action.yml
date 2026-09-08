@@ -62,17 +62,33 @@ runs:
         # here for precisely the users who have something to fix, before any
         # output or summary is produced.
         # SARIF is written first so the upload step has a file even then.
+        # Reports go to the runner temp directory, never inside the tree being
+        # scanned. `path` defaults to ".", so a report written beside the source
+        # is read by the next scan: the JSON one is picked up as an ordinary
+        # .json file and the summary then lists findings inside fiscalkit's own
+        # output, contradicting the count in its header. The SARIF file stays
+        # where the caller asked for it, because upload-sarif needs it there and
+        # ".sarif" is not a scanned extension.
+        report="${RUNNER_TEMP:-/tmp}/fiscalkit-report.json"
+        text_report="${RUNNER_TEMP:-/tmp}/fiscalkit-report.txt"
+        # Passed through the environment rather than interpolated into the
+        # python -c source, so a path containing a quote cannot break out of it.
+        export REPORT="$report"
+
         fiscalkit scan "${{ inputs.path }}" --format sarif > "${{ inputs.sarif-file }}" || true
-        fiscalkit scan "${{ inputs.path }}" --json > fiscalkit-report.json || true
+        fiscalkit scan "${{ inputs.path }}" --json > "$report" || true
+        # Captured once, from the same tree state as the JSON above, so the
+        # listing in the summary and the counts in its header always agree.
+        fiscalkit scan "${{ inputs.path }}" > "$text_report" || true
 
         # Composite action steps always run at the workspace root, whatever the
         # calling workflow sets as its default working-directory. Stating the
         # resolved path saves the next person the confusion it caused here.
         echo "wrote $(pwd)/${{ inputs.sarif-file }}"
 
-        total=$(python -c "import json;print(json.load(open('fiscalkit-report.json'))['total'])")
-        breaking=$(python -c "import json;print(json.load(open('fiscalkit-report.json'))['por_severidade'].get('breaks',0))")
-        ready=$(python -c "import json;print(str(json.load(open('fiscalkit-report.json'))['pronto_para_2026']).lower())")
+        total=$(python -c "import json,os;print(json.load(open(os.environ['REPORT']))['total'])")
+        breaking=$(python -c "import json,os;print(json.load(open(os.environ['REPORT']))['por_severidade'].get('breaks',0))")
+        ready=$(python -c "import json,os;print(str(json.load(open(os.environ['REPORT']))['pronto_para_2026']).lower())")
 
         echo "total=$total"       >> "$GITHUB_OUTPUT"
         echo "breaking=$breaking" >> "$GITHUB_OUTPUT"
@@ -82,22 +98,22 @@ runs:
           echo "## CNPJ 2026 readiness"
           echo
           if [ "$ready" = "true" ]; then
-            echo "No code incompatible with the alphanumeric CNPJ was found."
+            echo "Nenhum padrão incompatível com o CNPJ alfanumérico foi encontrado."
           else
-            echo "**$breaking** finding(s) certain to break, **$total** in total."
+            echo "**$breaking** ocorrência(s) que quebram com certeza, **$total** no total."
             echo
             echo '```'
-            fiscalkit scan "${{ inputs.path }}" || true
+            cat "$text_report"
             echo '```'
           fi
           echo
-          echo "_From July 2026, IN RFB 2.229/2024 allows letters in the first twelve"
-          echo "positions of a CNPJ. Upgrading a validation library does not fix a"
-          echo "numeric column or a \`^\\d{14}\$\` regex._"
+          echo "_A partir de julho de 2026, a IN RFB 2.229/2024 permite letras nas doze"
+          echo "primeiras posições do CNPJ. Atualizar a biblioteca de validação não"
+          echo "conserta uma coluna numérica nem uma regex \`^\\d{14}\$\`._"
         } >> "$GITHUB_STEP_SUMMARY"
 
         if [ "${{ inputs.fail-on-break }}" = "true" ] && [ "$breaking" != "0" ]; then
-          echo "::error::$breaking CNPJ finding(s) will break in July 2026"
+          echo "::error::$breaking ocorrência(s) de CNPJ vão quebrar em julho de 2026"
           exit 1
         fi
         exit 0
