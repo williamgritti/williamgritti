@@ -1,111 +1,176 @@
-# Activation checklist
+# Activation runbook
 
-`fiscalkit/` is finished and shippable. Everything below is the part that needs a
-human: it requires accounts, identity, and accepting terms of service, none of
-which an agent can or should do on your behalf.
+Everything in `fiscalkit/` is built, tested and verified. What remains needs a
+human: accounts, identity, accepting terms of service, and posting under your own
+name. None of that is something an agent can or should do for you.
+
+**Total time to first public release: about 30 minutes.**
 
 Nothing in this repository contains a payment address, and nothing should. Use
-public *handles* (Ko-fi, PayPal.Me) rather than an email address anywhere public.
+public *handles* (Ko-fi, PayPal.Me), never an email address, anywhere public.
 
-## 1. Give it its own repository (2 min)
+---
 
-The library currently lives in a subdirectory of the profile repo. It wants to be
-standalone so it gets its own stars, issues and PyPI link.
+## Do these in order
+
+The order matters. Posting before the package installs wastes the only launch you
+get with that audience.
+
+### 1. Give it its own repository — 2 min
+
+It lives in a subdirectory of the profile repo. Standalone, it gets its own
+stars, issues, PyPI link and Action listing.
 
 ```bash
-# from a clone of this branch
 cd fiscalkit
 git init && git add -A
 git commit -m "fiscalkit 0.1.0"
 gh repo create williamgritti/fiscalkit --public --source=. --push
 ```
 
-## 2. Publish to PyPI (10 min)
+Once it moves, `fiscalkit/.github/workflows/ci.yml` starts running on its own and
+the root `.github/workflows/fiscalkit.yml` in the profile repo can be deleted.
 
-`fiscalkit/release.sh` does the whole thing. It creates its own virtualenv, runs
-all five gates, builds, and checks the artifacts before anything is uploaded. It
-never reads or prints a token — twine takes credentials from `~/.pypirc` or the
-`TWINE_*` environment variables.
+### 2. Publish to PyPI — 10 min
+
+`release.sh` does all of it: its own virtualenv, all five gates, build, and
+`twine check` before anything uploads. It never reads or prints a token — twine
+takes credentials from `~/.pypirc` or `TWINE_*`.
 
 ```bash
 cd fiscalkit
 ./release.sh check      # gates only, changes nothing
-./release.sh testpypi   # rehearsal upload
-./release.sh publish    # the real one, behind a typed version confirmation
+./release.sh testpypi   # rehearsal
+./release.sh publish    # real, behind a typed version confirmation
 ```
 
-The name `fiscalkit` was free on PyPI as of this session. Publishing claims it.
+The name `fiscalkit` was free on PyPI during this session. Publishing claims it.
+This is the only step that was blocked here — the sandbox refuses
+`upload.pypi.org` — and everything up to it is verified green.
 
-This sandbox blocks `upload.pypi.org`, which is the only reason the upload is
-still outstanding — everything up to it is verified green.
+**Verify before moving on:**
 
-## 3. Turn on the funding rails (5 min)
+```bash
+pip install fiscalkit && fiscalkit scan .
+```
 
-`fiscalkit/.github/FUNDING.yml` ships with every line commented out. Uncomment
-only the ones whose accounts exist.
+If that fails for you it will fail for every reader, and step 4 is unrecoverable.
 
-The relevant fact for routing money to PayPal:
+### 3. Tag a release — 2 min
+
+The pre-commit hook needs a tag to point at.
+
+```bash
+git tag v0.1.0 && git push --tags
+```
+
+### 4. Post — 20 min, then answer comments
+
+`LAUNCH.md` has four pieces, each written for its own platform: a technical
+article, an r/brdev post, a LinkedIn post, and a 10-slide Instagram carousel for
+the Fiscal Tech audience.
+
+Article first so the rest can link to it. Then r/brdev the same day, LinkedIn the
+next morning, Instagram after.
+
+**Answer every comment in the first 48 hours.** On r/brdev that is where
+credibility is won, and the questions tell you which rule to write next.
+
+Read the "what not to do" section at the bottom of `LAUNCH.md` before posting.
+The short version: never claim another library is unprepared for the 2026 CNPJ.
+It is false, it is checkable in ten seconds, and it costs you the room.
+
+### 5. Funding rails — 5 min, optional
+
+`fiscalkit/.github/FUNDING.yml` ships fully commented out. Uncomment only lines
+whose accounts exist.
 
 | Rail | Reaches PayPal? | Notes |
 |---|---|---|
-| **Ko-fi** | **Yes, directly** | Payments land in the linked PayPal account immediately. No payout delay, no cut on donations. This is the shortest path. |
+| **Ko-fi** | **Yes, directly** | Lands in the linked PayPal account immediately. No payout delay, no cut on donations. The shortest path. |
 | **PayPal.Me** | Yes | A link, not an email. Safe to publish. |
-| GitHub Sponsors | No | Individual payouts go via Stripe Connect or bank transfer, not PayPal. Still worth enabling — different audience. |
-| Gumroad / Payhip | Sometimes | Useful later if you sell a paid tier rather than take donations. |
+| GitHub Sponsors | No | Individual payouts go via Stripe Connect or bank, not PayPal. Still worth enabling — different audience. |
+| Gumroad / Payhip | Sometimes | For a paid tier later, not donations. |
 
-Create the Ko-fi account, link it to your PayPal, then uncomment the `ko_fi:`
-line with your handle.
+Donations on a new library are a trickle. They are not the plan; section 7 is.
 
-## 4. Where the money actually comes from
+---
 
-**Read this before pitching anything.** My original thesis for this package was
-that the July 2026 alphanumeric CNPJ deadline was an unserved market. I tested
-that assumption by installing the competition, and **it is false**:
+## 6. Two things I got wrong, so you do not repeat them
 
-- `brutils` 2.5.0 and `validate-docbr` 2.0.0 already implement the alphanumeric
-  CNPJ rules correctly — verified against valid values, wrong check digits,
-  tampered bases and letters in check-digit positions. All five edge cases match
-  `fiscalkit` exactly.
-- `fiscal-mcp` 0.2.1 already exists and is the same concept as this package's MCP
-  server, and broader: official XSD validation, NFS-e, and IBS/CBS.
+**I claimed the alphanumeric CNPJ was an unserved market. It is not.** Tested by
+installing the competition: `brutils` 2.5.0 and `validate-docbr` 2.0.0 both
+implement the rules correctly, agreeing with `fiscalkit` on a valid alphanumeric
+number, wrong check digits, a tampered base, a letter in a check-digit position,
+and an all-letter base. `cnpj-alfanumerico` and `fiscal-mcp` exist too.
 
-So do not sell "we support the 2026 CNPJ and others don't." Any Brazilian dev
-will check in thirty seconds and you will lose the room.
+**Then I over-corrected and called the whole 2026 angle dead. Also wrong.** A
+library handling the format does not make a *system* ready. Verified by
+execution — each accepts `11222333000181` and rejects or corrupts
+`12ABC34501DE35`:
 
-**What changed after that finding.** The conclusion I first drew from it -- that
-the whole 2026 angle was dead -- was an overcorrection. A library handling the new
-format does not make a *system* ready. Verified: `^\d{14}$` regexes, `isdigit()`
-guards, `int()` casts, `BIGINT` columns and `re.sub(r"\D", ...)` normalization all
-accept `11222333000181` and reject or corrupt `12ABC34501DE35`. That code is in
-every legacy Brazilian system and no `pip install --upgrade` fixes it.
+| Pattern | Legacy | Alphanumeric |
+|---|---|---|
+| `^\d{14}$` | accepted | rejected |
+| `cnpj.isdigit()` | accepted | rejected |
+| `int(cnpj)` | accepted | raises |
+| `BIGINT` column | fits | cannot store |
+| `re.sub(r"\D","",cnpj)` | unchanged | **`'123450135'`, silently** |
 
-`fiscalkit scan` finds it. Checked before building: no scanner for this exists on
-PyPI, and the packages that do exist (`brutils`, `validate-docbr`,
-`cnpj-alfanumerico`, `fiscal-mcp`) are all validators. **This is a real gap, and
-it is the honest lead generator** -- run the scan against a prospect's repository,
-show them the count, and the fix is the engagement.
+That last one returns nine characters with no exception at all, and fails
+validation later somewhere unrelated. None of this is fixed by upgrading a
+dependency.
 
-What is actually true and defensible:
+`fiscalkit scan` finds all of it — 12 rules, 8 languages. Checked before building
+that no such scanner exists on PyPI; every package that does is a validator.
 
-- **The code is genuinely good** — zero dependencies, `mypy --strict`, 117 tests,
-  `Decimal` money, an honest treatment of the check-digit weakness. It is a
-  credible public work sample.
-- **Access-key decoding is a real gap** in the general-purpose libraries.
-  `brutils` has nothing for it.
-- **Your moat is not the library.** It is the tax-law specialization plus fifteen
-  years inside the machine. A commodity parser does not monetize that; advisory
-  and integration work does. The library is the credential that makes the
-  conversation happen, not the product.
+---
 
-The larger deadline-driven change worth studying is the **IBS/CBS transition**
-under EC 132/2023, which reshapes fiscal documents far more than the CNPJ format
-does. That is where a tax-law-plus-Python specialist has a durable advantage.
-Validate demand before building, the way this section should have been validated
-first.
+## 7. Where the money actually comes from
 
-## 5. Distribution, when you want it
+**Not the library.** It is MIT and anyone can use it free. That is the point.
 
-Blocked from this sandbox, all straightforward from your machine: the
-`r/brdev` and `r/Python` communities, the `awesome-mcp-servers` list, the
-Brazilian dev Discords, and a short post on the alphanumeric CNPJ change — that
-last one is genuinely useful content and it is on a deadline everyone shares.
+**The scanner is the lead generator.** Run it against a prospect's repository,
+show them the count of things that break in July 2026, and the remediation is the
+engagement. The finding *is* the pitch, and it has a deadline nobody controls.
+
+The CI integration is what makes this compound. `action.yml` plus SARIF means the
+check runs on every pull request in a Brazilian codebase and annotates findings
+on the diff line. Each install is a standing demonstration of the problem you
+solve, running without you.
+
+**Your moat is not the code.** It is the tax-law specialization plus fifteen
+years inside the machine. A parser anyone can write does not monetize that;
+advisory and integration work does. The library is the credential that starts the
+conversation, not the product being sold.
+
+**The bigger opportunity is IBS/CBS** under EC 132/2023, which reshapes fiscal
+documents far more than a CNPJ format change. Same structure: a mandatory
+deadline, real migration pain, and an advantage that needs both the tax law and
+the code. Have three customer conversations before writing any of it — the way
+section 6 should have been validated before I wrote the first version.
+
+---
+
+## What was verified, and what was not
+
+Verified by execution in this session:
+
+- 186 tests, `ruff`, `ruff format` and `mypy --strict` clean, with and without
+  the optional MCP dependency
+- CI green on every push — Python 3.10 through 3.13, plus a job with the MCP
+  extra deliberately absent
+- Wheel and sdist build, `twine check` passes, wheel installs into a pristine
+  virtualenv and both console scripts run
+- `fiscalkit scan` exit codes from the installed wheel: `1` on certain breakage,
+  `0` clean, `2` on a bad path
+- The GitHub Action's own shell under `bash -e`, which is how it caught that the
+  step aborted before writing outputs for anyone who actually had findings
+- Every technical claim in `LAUNCH.md`
+
+Not verified, because it cannot be from here:
+
+- The PyPI upload. Blocked by egress policy.
+- That anyone wants this. Nobody has used it yet. The market research went as far
+  as testing every competing package; it did not extend to talking to a buyer,
+  and it should before you build the next thing.
