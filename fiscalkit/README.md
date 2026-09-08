@@ -129,7 +129,7 @@ findings land on the exact line of the diff and in the Security tab, instead of
 buried in a log:
 
 ```yaml
-- uses: williamgritti/fiscalkit@main
+- uses: williamgritti/fiscalkit@v0.1.0
   id: cnpj
 - uses: github/codeql-action/upload-sarif@v3
   if: always()
@@ -141,6 +141,11 @@ The action writes a job summary, exposes `total`, `breaking` and `ready` as
 outputs, and fails the job only on certain breakage (`fail-on-break: false` to
 report without failing). SARIF generation always exits 0 so the upload succeeds
 even on a failing scan.
+
+Pinned to a tag rather than `@main`, because `@main` means running whatever is
+on this branch at the moment your build starts. That is the wrong default to hand
+a compliance-sensitive codebase, and it is what a supply-chain audit flags first.
+Pin to a commit SHA if your policy requires it.
 
 `sarif-file` resolves against the **workspace root**, not against any
 `working-directory` your workflow sets — composite action steps do not inherit

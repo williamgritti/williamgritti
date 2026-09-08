@@ -646,3 +646,33 @@ def test_readme_has_no_relative_links_because_it_is_the_pypi_page() -> None:
     # Markdown links whose target is neither absolute nor an intra-page anchor.
     relative = re.findall(r"\]\((?!https?://|#|mailto:)([^)]+)\)", readme.read_text("utf-8"))
     assert not relative, f"relative links break on the PyPI page: {relative}"
+
+
+def test_readme_pins_adopters_to_the_version_this_package_is() -> None:
+    """The snippets people paste must name the version being shipped.
+
+    The Action snippet said `@main` while the pre-commit one pinned `v0.1.0`, so
+    the two disagreed about how to consume the same release, and `@main` told a
+    compliance-sensitive codebase to run whatever is on a branch at build time.
+    Both are pinned now, and pinned numbers in prose drift on the next release
+    exactly the way "twelve rules" did -- so they are checked against
+    `__version__` rather than trusted.
+    """
+    import re
+    from pathlib import Path
+
+    import fiscalkit
+
+    readme = Path(fiscalkit.__file__).resolve().parents[2] / "README.md"
+    if not readme.is_file():
+        pytest.skip("README is not on disk beside the package")
+    text = readme.read_text(encoding="utf-8")
+
+    pinned = re.findall(r"williamgritti/fiscalkit@(\S+)", text)
+    assert pinned, "the Action snippet must pin a version"
+    revs = re.findall(r"^\s*rev:\s*(\S+)", text, re.M)
+    assert revs, "the pre-commit snippet must pin a rev"
+
+    expected = f"v{fiscalkit.__version__}"
+    wrong = [r for r in pinned + revs if r != expected]
+    assert not wrong, f"snippets pin {wrong}, but this package is {expected}"
