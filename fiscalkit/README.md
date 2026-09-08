@@ -81,6 +81,32 @@ The insidious one is `re.sub(r"\D", "", cnpj)`: it raises nothing, it just
 silently returns a shorter, wrong value that then fails validation somewhere else
 entirely.
 
+### It writes the patch, for the fixes that are unambiguous
+
+Reporting a problem leaves the work with you. Against a fixed deadline that is
+not much help, so four of the fourteen rules carry the rewrite with them:
+
+```console
+$ fiscalkit scan . --diff
+--- a/app/validators.py
++++ b/app/validators.py
+@@ -1,10 +1,10 @@
+-CNPJ_RE = re.compile(r"^\d{14}$")
++CNPJ_RE = re.compile(r"^[0-9A-Z]{12}[0-9]{2}$")
+ def normalizar(valor):
+-    return re.sub(r"\D", "", valor)
++    return re.sub(r"[^0-9A-Z]", "", valor)
+```
+
+The output is in the shape `git apply` accepts, so you can review it as a patch
+before touching anything. `--fix` applies it and reports what is left.
+
+**What it will not fix matters more than what it will.** `int(cnpj)` has no
+mechanical repair: the surrounding code has to stop treating a CNPJ as a number,
+and a tool that guessed would emit a plausible diff that silently changed
+behaviour. Those findings stay reported and untouched, and `--fix` says how many
+remain for a human.
+
 `scan` exits non-zero **only** on certain breakage, so it gates a build without
 failing it on advisory findings:
 

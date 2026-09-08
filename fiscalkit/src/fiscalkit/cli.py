@@ -30,6 +30,7 @@ from .mcp.server import (
     validar_cnpj,
     validar_cpf,
 )
+from .scan.fixer import apply_patches, build_patches, unified_diff
 from .scan.sarif import to_sarif
 from .scan.scanner import scan_path
 
@@ -132,6 +133,27 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         return 2
     result = scan_path(target, prune=not args.incluir_tudo)
     fmt = getattr(args, "format", "text")
+
+    if args.diff or args.fix:
+        root = target if target.is_dir() else target.parent
+        patches = build_patches(result.findings, root)
+        if not patches:
+            print("nenhuma correcao automatica disponivel para os achados", file=sys.stderr)
+            return 1 if result.breaks else 0
+        if args.diff:
+            print(unified_diff(patches, root), end="")
+            # A diff is a report, not a change; keep the gate semantics.
+            return 1 if result.breaks else 0
+        changed = apply_patches(patches)
+        for path in changed:
+            print(f"corrigido {path}")
+        remaining = scan_path(target, prune=not args.incluir_tudo)
+        print(
+            f"{len(changed)} arquivo(s) alterado(s); "
+            f"{len(remaining.findings)} ocorrencia(s) restante(s) para revisao humana"
+        )
+        return 1 if remaining.breaks else 0
+
     if fmt == "sarif":
         # SARIF is consumed by GitHub code scanning, which needs the upload to
         # succeed even when the scan found problems, so this always exits 0.
@@ -218,6 +240,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # Only `scan` produces SARIF, so the flag lives on that subparser alone.
     scan_parser = sub.choices["scan"]
+    scan_parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="mostra o patch sugerido em vez de aplicar (formato de git apply)",
+    )
+    scan_parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="aplica as correcoes mecanicas; o resto fica para revisao humana",
+    )
     scan_parser.add_argument(
         "--incluir-tudo",
         action="store_true",

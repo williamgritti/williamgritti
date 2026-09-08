@@ -48,6 +48,17 @@ class Rule:
     #: When true, only report if "cnpj" appears nearby. Keeps precision high for
     #: patterns like ``\\d{14}`` that are meaningless without that context.
     needs_cnpj_context: bool = False
+    #: An unambiguous textual rewrite, as ``(search, replace)`` pairs applied to
+    #: the offending line. Present only where the correct edit follows from the
+    #: pattern alone. A CNPJ cast to an integer has no mechanical fix -- the
+    #: surrounding code has to stop treating it as a number -- so that rule
+    #: deliberately carries none and ``--fix`` leaves it for a human.
+    autofix: tuple[tuple[str, str], ...] | None = None
+
+    @property
+    def is_fixable(self) -> bool:
+        """Whether this rule carries a mechanical rewrite."""
+        return bool(self.autofix)
 
     def applies_to(self, language: str) -> bool:
         """Whether this rule should run against a file of *language*."""
@@ -115,6 +126,7 @@ RULES: tuple[Rule, ...] = (
         ),
         fix="Match [0-9A-Z]{12}[0-9]{2} instead: the first twelve positions accept "
         "letters, the two check digits stay numeric.",
+        autofix=((r"\d{14}", "[0-9A-Z]{12}[0-9]{2}"), ("[0-9]{14}", "[0-9A-Z]{12}[0-9]{2}")),
     ),
     Rule(
         id="CNPJ002",
@@ -203,6 +215,12 @@ RULES: tuple[Rule, ...] = (
         ),
         fix="Migrate to CHAR(14) or VARCHAR(14). Plan for a backfill and for every "
         "foreign key that references this column.",
+        autofix=(
+            ("BIGINT", "CHAR(14)"),
+            ("bigint", "CHAR(14)"),
+            ("NUMERIC(14)", "CHAR(14)"),
+            ("DECIMAL(14,0)", "CHAR(14)"),
+        ),
     ),
     Rule(
         id="CNPJ012",
@@ -219,6 +237,10 @@ RULES: tuple[Rule, ...] = (
         ),
         explanation="The ORM will generate a numeric column that cannot hold letters.",
         fix="Use a character field of length 14.",
+        autofix=(
+            ("models.BigIntegerField(", "models.CharField(max_length=14, "),
+            ("models.IntegerField(", "models.CharField(max_length=14, "),
+        ),
     ),
     Rule(
         id="CNPJ013",
@@ -259,6 +281,11 @@ RULES: tuple[Rule, ...] = (
             "alphanumeric CNPJ, producing a shorter value that then fails validation."
         ),
         fix="Strip only punctuation: remove [^0-9A-Z] after upper-casing.",
+        autofix=(
+            ("[^0-9]", "[^0-9A-Z]"),
+            (r"[^\d]", "[^0-9A-Z]"),
+            (r"\D", "[^0-9A-Z]"),
+        ),
     ),
     Rule(
         id="CNPJ022",

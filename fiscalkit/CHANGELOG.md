@@ -77,6 +77,22 @@ maintainers, and it is recorded here rather than quietly rewritten, because it
 is the same over-generalisation this project has now made four times: test a
 sample, state a universal.
 
+### `--diff` and `--fix`
+
+Four rules -- the numeric regex, the non-digit strip, the numeric SQL column and
+the ORM integer field -- have a rewrite that follows from the pattern alone, and
+now carry it. `--diff` prints a unified diff in the shape `git apply` accepts,
+verified with `git apply --check`; `--fix` applies it and reports what remains.
+
+The ten rules without a rewrite are the point. `int(cnpj)` cannot be repaired by
+editing that line, because the surrounding code has to stop treating a CNPJ as a
+number; a tool that guessed would emit a plausible diff that silently changed
+behaviour. Those stay reported and untouched.
+
+Patches are built by re-reading each file rather than from the stored excerpt, so
+they always apply to the file as it is now, and applying twice is a no-op. No
+backup files are written: this is a source tree under version control.
+
 ### The context window was too tight for real code
 
 Walking the first-user journey -- clean install, scan a realistic legacy Django
