@@ -1,17 +1,23 @@
 # Launch content — ready to post
 
 Everything here is written to be pasted with minimal editing. Every technical
-claim was verified by execution during this session; nothing asserts a
-competitor is broken, because that claim was tested and is false.
+claim was verified by execution during this session, including the one negative
+claim about another library, which was confirmed by running it rather than
+assumed.
 
-**The honest angle, and the only one used below:** validation libraries already
-handle the alphanumeric CNPJ. `brutils`, `validate-docbr` and `cnpj-alfanumerico`
-all get it right. What breaks is the code *around* the validator, and no
-dependency upgrade touches it. That is true, verifiable in ten seconds, and it is
-what makes the scanner worth existing.
+**The honest angle, and the only one used below.** Five libraries were tested by
+execution. Four handle the alphanumeric CNPJ correctly: `brutils` and
+`validate-docbr` in Python, `cpf-cnpj-validator` and `validation-br` in
+JavaScript. One does not: **`@brazilian-utils/brazilian-utils` 2.3.0 returns
+`false` for a valid alphanumeric CNPJ.**
 
-Do not claim the libraries are unprepared. A Brazilian developer will check, find
-you wrong, and stop reading.
+So the accurate line is "most validation libraries are ready" -- never "the
+libraries are unprepared", and never a blanket "they are all ready" either. Both
+are checkable in ten seconds and being caught on either one ends the piece.
+
+The point that survives either way: even a fully ready library does not make a
+*system* ready, because what breaks is the code around the validator and no
+dependency upgrade touches it.
 
 ---
 
@@ -25,14 +31,16 @@ Post on dev.to, Medium or your own site first, so everything else can link to it
 > 2.229/2024 mantém 14 posições, mas as doze primeiras passam a aceitar `A-Z`
 > além de `0-9`. Os dois últimos dígitos continuam numéricos.
 >
-> A primeira coisa que todo mundo faz é conferir a biblioteca de validação. E aí
-> vem a boa notícia: **elas já estão prontas.** `brutils`, `validate-docbr` e
-> `cnpj-alfanumerico` implementam a regra corretamente — testei as três contra um
-> CNPJ alfanumérico válido, contra dígitos verificadores errados, contra uma base
-> adulterada e contra uma letra na posição do DV. Todas acertaram todos os casos.
+> A primeira coisa que todo mundo faz é conferir a biblioteca de validação.
+> Testei cinco, rodando de verdade. Quatro já estão prontas: `brutils` e
+> `validate-docbr` em Python, `cpf-cnpj-validator` e `validation-br` em
+> JavaScript. Uma não está: **`@brazilian-utils/brazilian-utils` 2.3.0 retorna
+> `false` para um CNPJ alfanumérico válido.**
 >
-> É exatamente por isso que esse problema é perigoso. **Você atualiza a
-> dependência, o teste passa, e você acha que terminou.**
+> Ou seja: provavelmente sua lib já está pronta — mas confira a sua, não a média.
+>
+> E é exatamente aí que mora o perigo. **Você atualiza a dependência, o teste
+> passa, e você acha que terminou.**
 >
 > Não terminou. O que quebra é o código em volta do validador.
 >
@@ -103,12 +111,15 @@ Post on dev.to, Medium or your own site first, so everything else can link to it
 
 Post as text, not a link. Link posts get ignored there.
 
-> **Título:** Testei se as libs de CNPJ estão prontas pro alfanumérico de 2026. Estão. O problema é outro.
+> **Título:** Testei 5 libs de CNPJ pro alfanumérico de 2026. Quatro passaram, uma não. E o problema maior nem é esse.
 >
-> Fiz o teste que todo mundo faz: peguei `brutils`, `validate-docbr` e
-> `cnpj-alfanumerico` e joguei um CNPJ alfanumérico válido nelas. Passaram todas,
-> inclusive nos casos de borda (DV errado, base adulterada, letra na posição do
-> DV).
+> Fiz o teste que todo mundo faz: joguei um CNPJ alfanumérico válido em cinco
+> libs. Quatro passaram, inclusive nos casos de borda (DV errado, base
+> adulterada, letra na posição do DV): `brutils`, `validate-docbr`,
+> `cpf-cnpj-validator` e `validation-br`.
+>
+> Uma reprovou: `@brazilian-utils/brazilian-utils` 2.3.0 devolve `false` pra um
+> CNPJ alfanumérico válido. Se você usa essa, confere aí.
 >
 > Aí testei o que tem em volta do validador, que é onde eu trabalho de verdade:
 >
@@ -136,11 +147,11 @@ Shorter, and the CTA is the conversation, not the install.
 
 > Em julho de 2026 o CNPJ aceita letras (IN RFB 2.229/2024).
 >
-> A primeira reação é conferir a biblioteca de validação. Testei as principais:
-> já estão prontas.
+> A primeira reação é conferir a biblioteca de validação. Testei cinco: quatro já
+> estão prontas, uma não (`@brazilian-utils/brazilian-utils` 2.3.0).
 >
-> É justamente por isso que é perigoso. Você atualiza a dependência, o teste
-> passa, e acha que acabou.
+> Ou seja, a sua provavelmente já está — e é justamente por isso que é perigoso.
+> Você atualiza a dependência, o teste passa, e acha que acabou.
 >
 > O que quebra é o resto:
 >
@@ -168,7 +179,7 @@ For the Fiscal Tech audience. Keep the visual language you already use.
 
 1. **JULHO DE 2026** / O CNPJ vai aceitar letras. / Seu sistema já sabe disso?
 2. A IN RFB 2.229/2024 mantém 14 posições. / As 12 primeiras aceitam A-Z. / Os 2 dígitos finais continuam numéricos.
-3. "Mas minha biblioteca já atualizou." / Já. Testei três delas. / Todas passaram.
+3. "Mas minha lib já atualizou." / Testei 5: quatro sim, uma não. / Confere a sua, não a média.
 4. **E é por isso que é perigoso.** / Você atualiza, o teste passa, / e acha que terminou.
 5. O que quebra é o código em volta. / Nenhum deles é dependência.
 6. `^\d{14}$` → REJEITA um CNPJ válido
@@ -177,8 +188,9 @@ For the Fiscal Tech audience. Keep the visual language you already use.
 9. O do banco é o mais urgente: / ALTER TABLE + backfill + todas as FKs. / Isso não se faz em junho.
 10. `pip install fiscalkit` / `fiscalkit scan .` / Open source, MIT. / Link na bio.
 
-**Legenda:** Em julho de 2026 o CNPJ passa a aceitar letras. As bibliotecas de
-validação já estão prontas — testei. O problema é o código em volta delas: regex
+**Legenda:** Em julho de 2026 o CNPJ passa a aceitar letras. Testei cinco
+bibliotecas de validação: quatro já estão prontas, uma não. Mas o problema maior
+é o código em volta delas: regex
 numérica, cast pra inteiro, coluna BIGINT. Nada disso se resolve atualizando
 dependência. Fiz um scanner open source que acha esses padrões no seu projeto.
 Link na bio. #cnpj #devbr #python #fiscal #ir2026
@@ -198,7 +210,9 @@ Link na bio. #cnpj #devbr #python #fiscal #ir2026
 ## What not to do
 
 - Do not post the same text everywhere. Each platform gets its own version above.
-- Do not claim any library is unprepared. It is false and it is checkable.
+- Do not claim the libraries are unprepared, and do not claim they are all ready
+  either. Four of five tested are ready; `@brazilian-utils/brazilian-utils` 2.3.0
+  is not. Both blanket versions are checkable in seconds.
 - Do not lead with consulting. Lead with the finding; the work follows from it.
 - Do not post before the package installs. A broken `pip install` in front of the
   only audience that matters is not recoverable in the same news cycle.

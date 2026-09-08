@@ -517,3 +517,70 @@ def test_prose_quoting_a_pattern_is_reported() -> None:
     assert "CNPJ001" in _ids(docstring)
     # A `#` comment is still skipped -- that is a separate, deliberate rule.
     assert scan_text("# a ^\\d{14}$ regex for cnpj", language="python") == []
+
+
+# ---------------------------------------------------------------------------
+# Pruning and bundled output must be visible, never silent
+# ---------------------------------------------------------------------------
+
+
+def test_pruning_is_counted_and_reported(tmp_path) -> None:
+    """A published npm package keeps its only copy of the code in `dist`.
+
+    Scanning one used to prune every file and report the package ready without
+    having read a line of it -- the same false all-clear as the site-packages
+    bug, reached by a different route. What pruning hides is now counted.
+    """
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "bundle.js").write_text("const cnpj = parseInt(row.cnpj, 10);\n", encoding="utf-8")
+    (tmp_path / "index.js").write_text("export {};\n", encoding="utf-8")
+
+    pruned = scan_path(tmp_path)
+    assert pruned.files_pruned == 1
+    assert pruned.pruned == {"dist": 1}
+    assert pruned.to_dict()["arquivos_podados"] == 1
+
+    # Turning pruning off reaches the code and finds the defect.
+    everything = scan_path(tmp_path, prune=False)
+    assert everything.files_pruned == 0
+    assert everything.breaks
+
+
+def test_pruning_only_counts_files_it_would_have_read(tmp_path) -> None:
+    """A PNG inside dist/ is not a file the scan was ever going to open."""
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (dist / "app.js").write_text("var x = 1;\n", encoding="utf-8")
+    assert scan_path(tmp_path).files_pruned == 1
+
+
+def test_minified_bundles_are_set_aside_and_counted(tmp_path) -> None:
+    """A finding on line 1 of a minified bundle is unactionable.
+
+    The excerpt is a meaningless slice of one enormous line, and the fix belongs
+    in the original source, which is elsewhere. Set aside, but counted, because
+    silently ignoring files is the failure mode this project keeps hitting.
+    """
+    (tmp_path / "app.min.js").write_text(
+        "var a=1;/*" + "z" * 3000 + "*/ var cnpj=parseInt(x.cnpj);\n", encoding="utf-8"
+    )
+    (tmp_path / "src.js").write_text("const cnpj = parseInt(row.cnpj, 10);\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+    assert result.files_minified == 1
+    assert result.files_scanned == 1
+    assert result.to_dict()["arquivos_minificados"] == 1
+    # The real source is still reported.
+    assert result.breaks
+    assert all("min.js" not in f.path for f in result.findings)
+
+
+def test_ordinary_long_lines_are_still_scanned(tmp_path) -> None:
+    """The threshold must not exclude merely verbose real code."""
+    line = 'cnpj = int(row["cnpj"])  # ' + "x" * 500 + "\n"
+    (tmp_path / "verbose.py").write_text(line, encoding="utf-8")
+    result = scan_path(tmp_path)
+    assert result.files_minified == 0
+    assert result.breaks

@@ -58,6 +58,12 @@ SKIP_DIRS = frozenset(
 #: Files above this size are almost certainly data or minified bundles.
 MAX_FILE_BYTES = 2_000_000
 
+#: A line this long means a bundled or minified artifact. A finding in one is
+#: unactionable: it reports "line 1" of a file the author never edits, and the
+#: excerpt is a meaningless slice of a single enormous line. The original source
+#: is elsewhere and is what should be fixed.
+MAX_LINE_LENGTH = 2_000
+
 #: How many lines either side count as "nearby" for context-dependent rules.
 CONTEXT_LINES = 2
 
@@ -96,11 +102,21 @@ class Finding:
 
 @dataclass(slots=True)
 class ScanResult:
-    """Everything one scan found, plus what it looked at."""
+    """Everything one scan found, plus what it looked at and what it did not."""
 
     findings: list[Finding] = field(default_factory=list)
     files_scanned: int = 0
     files_skipped: int = 0
+    #: Files that parsed but were set aside as bundled or minified output.
+    files_minified: int = 0
+    #: Scannable files that were never read because they sit in a pruned
+    #: directory, keyed by the directory name responsible.
+    pruned: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def files_pruned(self) -> int:
+        """How many scannable files a pruned directory hid from this scan."""
+        return sum(self.pruned.values())
 
     @property
     def breaks(self) -> list[Finding]:
@@ -145,6 +161,9 @@ class ScanResult:
             "por_severidade": self.counts(),
             "pronto_para_2026": self.is_clean,
             "nada_analisado": self.scanned_nothing,
+            "arquivos_minificados": self.files_minified,
+            "arquivos_podados": self.files_pruned,
+            "diretorios_podados": dict(sorted(self.pruned.items())),
             "ocorrencias": [f.to_dict() for f in self.sorted_findings()],
         }
 
@@ -197,8 +216,8 @@ def scan_text(text: str, *, path: str = "<string>", language: str | None = None)
     return findings
 
 
-def _walk(root: Path) -> Iterator[Path]:
-    """Yield scannable files under *root*, pruning dependency directories.
+def _walk(root: Path, *, prune: bool, pruned: dict[str, int]) -> Iterator[Path]:
+    """Yield scannable files under *root*, recording what pruning hid.
 
     Pruning is applied only to path components *below* *root*, never to the
     components of *root* itself. Otherwise pointing the scanner at a directory
@@ -206,6 +225,12 @@ def _walk(root: Path) -> Iterator[Path]:
     and reports a clean project -- a false all-clear, which is the worst answer
     a compliance scanner can give. If the caller named the directory explicitly,
     they meant it.
+
+    Pruning is never silent either. A published npm package keeps its only copy
+    of the code in ``dist``, so scanning one prunes every file and would
+    otherwise report the package ready without having read a line of it. What
+    was hidden is counted into *pruned* so the caller can say so, and ``prune``
+    turns the behaviour off entirely.
     """
     if root.is_file():
         yield root
@@ -217,20 +242,31 @@ def _walk(root: Path) -> Iterator[Path]:
             relative = path.relative_to(root)
         except ValueError:  # pragma: no cover - rglob results are under root
             relative = path
-        if any(part in SKIP_DIRS for part in relative.parts):
-            continue
+        if prune:
+            hidden_by = next((part for part in relative.parts if part in SKIP_DIRS), None)
+            if hidden_by is not None:
+                # Only count files this scan would otherwise have read.
+                if language_of(path.name) is not None:
+                    pruned[hidden_by] = pruned.get(hidden_by, 0) + 1
+                continue
         yield path
 
 
-def scan_path(root: str | Path) -> ScanResult:
+def scan_path(root: str | Path, *, prune: bool = True) -> ScanResult:
     """Scan every recognized source file under *root*.
+
+    Args:
+        root: File or directory to scan.
+        prune: Skip dependency and build directories. Leave on for a source
+            repository; turn it off for a published artifact whose only copy of
+            the code lives in a directory this would otherwise skip.
 
     Unreadable and oversized files are counted as skipped rather than raising, so
     one unreadable file cannot abort a scan of a large repository.
     """
     result = ScanResult()
     base = Path(root)
-    for path in _walk(base):
+    for path in _walk(base, prune=prune, pruned=result.pruned):
         language = language_of(path.name)
         if language is None:
             continue
@@ -241,6 +277,10 @@ def scan_path(root: str | Path) -> ScanResult:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             result.files_skipped += 1
+            continue
+        # Reported, never silent, for the same reason pruning is.
+        if any(len(line) > MAX_LINE_LENGTH for line in text.splitlines()):
+            result.files_minified += 1
             continue
         try:
             display = str(path.relative_to(base))

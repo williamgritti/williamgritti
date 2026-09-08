@@ -130,7 +130,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if not target.exists():
         print(f"caminho nao encontrado: {target}", file=sys.stderr)
         return 2
-    result = scan_path(target)
+    result = scan_path(target, prune=not args.incluir_tudo)
     fmt = getattr(args, "format", "text")
     if fmt == "sarif":
         # SARIF is consumed by GitHub code scanning, which needs the upload to
@@ -155,6 +155,19 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         f"{counts.get('breaks', 0)} quebra, {counts.get('risky', 0)} risco, "
         f"{counts.get('review', 0)} rever"
     )
+    if result.files_minified:
+        print(
+            f"aviso: {result.files_minified} arquivo(s) minificado(s)/empacotado(s) "
+            f"ignorado(s) -- corrija no codigo-fonte, nao no bundle.",
+            file=sys.stderr,
+        )
+    if result.files_pruned:
+        which = ", ".join(f"{name} ({n})" for name, n in sorted(result.pruned.items()))
+        print(
+            f"aviso: {result.files_pruned} arquivo(s) ignorado(s) em diretorios "
+            f"podados: {which}. use --incluir-tudo para analisa-los.",
+            file=sys.stderr,
+        )
     if result.scanned_nothing:
         print(
             "nenhum arquivo analisado -- verifique o caminho ou a extensao dos arquivos",
@@ -205,6 +218,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # Only `scan` produces SARIF, so the flag lives on that subparser alone.
     scan_parser = sub.choices["scan"]
+    scan_parser.add_argument(
+        "--incluir-tudo",
+        action="store_true",
+        help="analisa tambem dist/, build/, vendor/ e afins (util para pacotes publicados)",
+    )
     scan_parser.add_argument(
         "--format",
         choices=["text", "json", "sarif"],

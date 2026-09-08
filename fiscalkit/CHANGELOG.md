@@ -48,6 +48,27 @@ First release.
 - **MCP server** (`fiscalkit-mcp`) exposing eight tools to AI agents, returning
   structured failure payloads rather than raising.
 
+### Pruning and bundled output are reported, never silent
+
+Scanning three real Brazilian npm packages showed one file analysed each, out of
+240. A published npm package keeps its only copy of the code in `dist`, which is
+pruned as build output -- correct for a source repository, wrong for a published
+artifact, and in both cases it reported the package ready without reading a line
+of it. The same false all-clear as the `site-packages` bug, by another route.
+
+- `ScanResult` now counts what pruning hid, per directory, and the CLI warns.
+  `--incluir-tudo` (`prune=False`) turns pruning off for published artifacts.
+- Minified and bundled files are set aside and counted rather than reported.
+  A finding on line 1 of a one-line bundle is unactionable: the excerpt is a
+  slice of an enormous line and the fix belongs in source that lives elsewhere.
+
+That scan also corrected a claim of this project's own documentation. Of five
+validation libraries tested by execution, four handle the alphanumeric CNPJ
+(`brutils`, `validate-docbr`, `cpf-cnpj-validator`, `validation-br`) and one
+does not: **`@brazilian-utils/brazilian-utils` 2.3.0 returns `false` for a valid
+alphanumeric CNPJ.** The blanket "the libraries are already ready" was drawn from
+Python packages alone and is now stated per library.
+
 ### Verified the remaining documented claims
 
 - **`mcp` 1.x support was claimed but never executed.** The optional extra
