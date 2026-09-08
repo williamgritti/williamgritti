@@ -1,0 +1,972 @@
+"""Tests for the 2026 alphanumeric-CNPJ readiness scanner."""
+
+from __future__ import annotations
+
+import re
+
+import pytest
+
+from fiscalkit.scan import RULES, scan_path, scan_text
+from fiscalkit.scan.fixer import apply_patches, build_patches, unified_diff
+from fiscalkit.scan.rules import BREAKS, SEVERITY_ORDER, language_of
+
+LEGACY = "11222333000181"  # valid numeric CNPJ
+ALPHA = "12ABC34501DE35"  # valid alphanumeric CNPJ under IN RFB 2.229/2024
+
+
+# ---------------------------------------------------------------------------
+# The premise itself: these patterns really do discriminate against the new format
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "predicate"),
+    [
+        ("numeric regex", lambda v: bool(re.fullmatch(r"\d{14}", v))),
+        ("charclass regex", lambda v: bool(re.fullmatch(r"[0-9]{14}", v))),
+        ("isdigit", lambda v: v.isdigit()),
+    ],
+)
+def test_flagged_patterns_actually_reject_alphanumeric(name: str, predicate) -> None:
+    """A rule is only justified if the pattern it flags really breaks.
+
+    Each accepts the legacy CNPJ and rejects the alphanumeric one, which is
+    precisely the regression the scanner exists to find.
+    """
+    assert predicate(LEGACY) is True, f"{name} should accept a legacy CNPJ"
+    assert predicate(ALPHA) is False, f"{name} should reject the alphanumeric CNPJ"
+
+
+def test_int_cast_destroys_an_alphanumeric_cnpj() -> None:
+    assert int(LEGACY) == 11222333000181
+    with pytest.raises(ValueError):
+        int(ALPHA)
+
+
+def test_stripping_non_digits_corrupts_an_alphanumeric_cnpj() -> None:
+    """The most insidious one: no exception, just a silently wrong value."""
+    assert re.sub(r"\D", "", LEGACY) == LEGACY
+    corrupted = re.sub(r"\D", "", ALPHA)
+    assert corrupted != ALPHA
+    assert len(corrupted) < 14
+
+
+# ---------------------------------------------------------------------------
+# Rule metadata
+# ---------------------------------------------------------------------------
+
+
+def test_rules_are_well_formed() -> None:
+    ids = [r.id for r in RULES]
+    assert len(ids) == len(set(ids)), "rule ids must be unique"
+    for rule in RULES:
+        assert rule.severity in SEVERITY_ORDER
+        assert rule.title and rule.explanation and rule.fix
+        assert rule.fix != rule.explanation, f"{rule.id} must say how to fix it"
+
+
+def test_language_detection() -> None:
+    assert language_of("app.py") == "python"
+    assert language_of("schema.SQL") == "sql"
+    assert language_of("Component.tsx") == "typescript"
+    assert language_of("photo.png") is None
+    assert language_of("README.md") is None
+
+
+# ---------------------------------------------------------------------------
+# Detection
+# ---------------------------------------------------------------------------
+
+
+def _ids(code: str, language: str | None = "python") -> set[str]:
+    return {f.rule_id for f in scan_text(code, language=language)}
+
+
+def test_detects_numeric_only_regex() -> None:
+    assert "CNPJ001" in _ids('CNPJ_RE = re.compile(r"^\\d{14}$")')
+    assert "CNPJ001" in _ids('if re.match("^[0-9]{14}$", cnpj):')
+
+
+def test_detects_isdigit_guard() -> None:
+    assert "CNPJ003" in _ids("if not cnpj.isdigit():\n    raise ValueError()")
+
+
+def test_detects_int_cast() -> None:
+    assert "CNPJ010" in _ids("record.cnpj_num = int(cnpj)")
+    assert "CNPJ010" in _ids("Long.parseLong(cnpj)", language="java")
+
+
+def test_detects_numeric_sql_column() -> None:
+    found = _ids("CREATE TABLE empresa (cnpj BIGINT NOT NULL);", language="sql")
+    assert "CNPJ011" in found
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "cnpj = models.BigIntegerField()",
+        "cnpj: int = Column(Integer)",
+        "cnpj = models.IntegerField(unique=True)",
+    ],
+)
+def test_detects_orm_integer_field(declaration: str) -> None:
+    assert "CNPJ012" in _ids(declaration)
+
+
+def test_detects_non_digit_stripping() -> None:
+    assert "CNPJ021" in _ids('cnpj = re.sub(r"\\D", "", raw_cnpj)')
+
+
+def test_detects_zero_padding() -> None:
+    assert "CNPJ013" in _ids("cnpj = cnpj.zfill(14)")
+
+
+def test_sql_only_rule_does_not_fire_on_python() -> None:
+    """CNPJ011 targets DDL; the same words in Python are not a column."""
+    code = "cnpj_bigint = 1"
+    assert "CNPJ011" not in _ids(code, language="python")
+
+
+# ---------------------------------------------------------------------------
+# Precision -- a noisy scanner gets muted after one run
+# ---------------------------------------------------------------------------
+
+
+def test_clean_modern_code_produces_nothing() -> None:
+    code = """
+from fiscalkit import CNPJ, is_valid_cnpj
+
+CNPJ_RE = re.compile(r"^[0-9A-Z]{12}[0-9]{2}$")
+
+def normalize(value: str) -> str:
+    return re.sub(r"[^0-9A-Z]", "", value.upper())
+
+def check(value: str) -> bool:
+    return is_valid_cnpj(normalize(value))
+"""
+    assert scan_text(code, language="python") == []
+
+
+def test_unrelated_numeric_code_is_not_flagged() -> None:
+    """\\d{14} without any CNPJ nearby is somebody else's identifier."""
+    code = 'TRACKING_RE = re.compile(r"^\\d{14}$")\nparse(int(order_id))'
+    assert _ids(code) == set()
+
+
+def test_context_window_gates_the_generic_rules() -> None:
+    """CNPJ001 needs 'cnpj' nearby; distance beyond the window stops it."""
+    near = 'cnpj = form["cnpj"]\nif re.match(r"^\\d{14}$", value):'
+    far = 'cnpj = form["cnpj"]\n' + "\n" * 8 + 'if re.match(r"^\\d{14}$", value):'
+    assert "CNPJ001" in _ids(near)
+    assert "CNPJ001" not in _ids(far)
+
+
+def test_commented_out_code_is_ignored() -> None:
+    for comment in ("# ", "// ", "-- "):
+        code = f'{comment}cnpj check: re.match(r"^\\d{{14}}$", cnpj)'
+        assert scan_text(code, language="python") == []
+
+
+# ---------------------------------------------------------------------------
+# Directory scanning
+# ---------------------------------------------------------------------------
+
+
+def test_scan_directory_reports_and_prunes(tmp_path) -> None:
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "validators.py").write_text(
+        'import re\ncnpj = payload["cnpj"]\nif not re.match(r"^\\d{14}$", cnpj):\n    reject()\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "schema.sql").write_text(
+        "CREATE TABLE fornecedor (cnpj BIGINT PRIMARY KEY);\n", encoding="utf-8"
+    )
+    # Dependencies must be pruned, or every scan drowns in third-party noise.
+    vendor = tmp_path / "node_modules" / "pkg"
+    vendor.mkdir(parents=True)
+    (vendor / "index.js").write_text("const re = /^\\d{14}$/; // cnpj\n", encoding="utf-8")
+    (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    result = scan_path(tmp_path)
+    paths = {f.path for f in result.findings}
+    assert any("validators.py" in p for p in paths)
+    assert any("schema.sql" in p for p in paths)
+    assert not any("node_modules" in p for p in paths)
+    assert not result.is_clean
+    assert result.breaks
+
+
+def test_scan_result_serializes_and_sorts(tmp_path) -> None:
+    import json
+
+    (tmp_path / "m.py").write_text(
+        'cnpj = row["cnpj"]\ncnpj = cnpj.zfill(14)\nif not cnpj.isdigit():\n    fail()\n',
+        encoding="utf-8",
+    )
+    result = scan_path(tmp_path)
+    payload = result.to_dict()
+    json.dumps(payload, ensure_ascii=False)
+    severities = [f.severity for f in result.sorted_findings()]
+    assert severities == sorted(severities, key=lambda s: SEVERITY_ORDER[s])
+    assert payload["pronto_para_2026"] is False
+
+
+def test_clean_project_is_ready(tmp_path) -> None:
+    (tmp_path / "ok.py").write_text(
+        "from fiscalkit import is_valid_cnpj\n\ndef check(v): return is_valid_cnpj(v)\n",
+        encoding="utf-8",
+    )
+    result = scan_path(tmp_path)
+    assert result.is_clean
+    assert result.to_dict()["pronto_para_2026"] is True
+
+
+def test_unreadable_file_is_skipped_not_fatal(tmp_path) -> None:
+    good = tmp_path / "a.py"
+    good.write_text("cnpj = 1\n", encoding="utf-8")
+    bad = tmp_path / "b.py"
+    bad.write_bytes(b"\xff\xfe\x00binary")
+    result = scan_path(tmp_path)  # must not raise
+    assert result.files_scanned >= 1
+
+
+def test_scanning_fiscalkit_itself_finds_no_breakage() -> None:
+    """The library must not contain the patterns it warns about.
+
+    `rules.py` holds the detection patterns as data, so it is excluded -- a rule
+    definition is not a defect.
+    """
+    from pathlib import Path
+
+    import fiscalkit
+
+    root = Path(fiscalkit.__file__).parent
+    # Modules that describe the patterns report themselves, which is the
+    # documented behaviour rather than an exception carved out for convenience:
+    # the scanner reads lines and cannot tell a regex in code from one quoted in
+    # prose, and prose describing a numeric-only CNPJ rule usually deserves the
+    # same review as code implementing one. Every other module must be clean.
+    describes_the_rules = {"rules.py", "fixer.py"}
+    offenders = [
+        f
+        for f in scan_path(root).findings
+        if f.severity == BREAKS and Path(f.path).name not in describes_the_rules
+    ]
+    assert offenders == [], f"fiscalkit itself would break: {offenders}"
+
+
+# ---------------------------------------------------------------------------
+# SARIF -- what GitHub code scanning ingests
+# ---------------------------------------------------------------------------
+
+
+def test_sarif_document_is_well_formed(tmp_path) -> None:
+    import json
+
+    from fiscalkit.scan.sarif import SARIF_VERSION, to_sarif
+
+    (tmp_path / "a.py").write_text(
+        'import re\ncnpj = row["cnpj"]\nif not re.match(r"^\\d{14}$", cnpj):\n    fail()\n',
+        encoding="utf-8",
+    )
+    doc = to_sarif(scan_path(tmp_path))
+    json.dumps(doc)  # must survive the transport
+
+    assert doc["version"] == SARIF_VERSION
+    assert doc["$schema"].endswith("sarif-schema-2.1.0.json")
+    run = doc["runs"][0]
+
+    driver = run["tool"]["driver"]
+    assert driver["name"] == "fiscalkit"
+    # Every rule is declared, not only the matched ones, so the Security tab can
+    # describe a rule even on a scan that reports none of it.
+    assert len(driver["rules"]) == len(RULES)
+
+    assert run["results"], "expected at least one result"
+    declared = {r["id"] for r in driver["rules"]}
+    for result in run["results"]:
+        assert result["ruleId"] in declared
+        assert result["level"] in {"error", "warning", "note"}
+        assert result["message"]["text"]
+        region = result["locations"][0]["physicalLocation"]["region"]
+        assert region["startLine"] >= 1
+
+
+def test_sarif_severity_maps_to_github_levels(tmp_path) -> None:
+    from fiscalkit.scan.sarif import to_sarif
+
+    (tmp_path / "m.py").write_text(
+        'cnpj = row["cnpj"]\ncnpj = int(cnpj)\ncnpj = cnpj.zfill(14)\n', encoding="utf-8"
+    )
+    levels = {r["ruleId"]: r["level"] for r in to_sarif(scan_path(tmp_path))["runs"][0]["results"]}
+    assert levels.get("CNPJ010") == "error"  # breaks
+    assert levels.get("CNPJ013") == "warning"  # risky
+
+
+def test_sarif_uses_relative_forward_slashed_paths(tmp_path) -> None:
+    """SARIF requires a relative URI; an absolute Windows path is rejected."""
+    from fiscalkit.scan.sarif import to_sarif
+
+    nested = tmp_path / "app" / "db"
+    nested.mkdir(parents=True)
+    (nested / "m.py").write_text('cnpj = int(row["cnpj"])\n', encoding="utf-8")
+    uri = to_sarif(scan_path(tmp_path))["runs"][0]["results"][0]["locations"][0][
+        "physicalLocation"
+    ]["artifactLocation"]["uri"]
+    assert "\\" not in uri
+    assert not uri.startswith("/")
+    assert uri == "app/db/m.py"
+
+
+def test_sarif_on_a_clean_project_has_no_results(tmp_path) -> None:
+    from fiscalkit.scan.sarif import to_sarif
+
+    (tmp_path / "ok.py").write_text("from fiscalkit import is_valid_cnpj\n", encoding="utf-8")
+    doc = to_sarif(scan_path(tmp_path))
+    assert doc["runs"][0]["results"] == []
+    assert len(doc["runs"][0]["tool"]["driver"]["rules"]) == len(RULES)
+
+
+# ---------------------------------------------------------------------------
+# Behaviour derived from testing against real Brazilian CNPJ libraries
+# ---------------------------------------------------------------------------
+
+
+def test_correct_2026_isdigit_pattern_is_not_flagged() -> None:
+    """`cnpj[12:].isdigit()` is right; `cnpj.isdigit()` is wrong.
+
+    Under IN RFB 2.229/2024 the two check digits stay numeric while the first
+    twelve positions may hold letters, so asserting the *slice* is numeric is
+    exactly correct. `brutils` does precisely this, and flagging it would make
+    the scanner cry wolf on the reference implementation.
+    """
+    assert "CNPJ003" not in _ids("if not cnpj[12:].isdigit():\n    return False")
+    assert "CNPJ003" not in _ids("valid = cnpj[12:14].isdigit()")
+    # The unsliced form is the actual defect and must still be caught.
+    assert "CNPJ003" in _ids("if not cnpj.isdigit():\n    return False")
+
+
+def test_no_false_positives_on_a_correct_implementation() -> None:
+    """A faithful 2026-ready validator must scan completely clean."""
+    reference = """
+def is_valid(cnpj: str) -> bool:
+    if len(cnpj) != 14:
+        return False
+    if not cnpj[12:].isdigit():
+        return False
+    return _check_digits(cnpj) == cnpj[12:]
+
+
+def _value(char: str) -> int:
+    return ord(char) - 48
+
+
+def remove_symbols(dirty: str) -> str:
+    return "".join(c for c in dirty.upper() if c.isalnum())
+"""
+    assert scan_text(reference, language="python") == []
+
+
+def test_directory_named_in_skip_dirs_is_still_scanned_when_given_explicitly(
+    tmp_path,
+) -> None:
+    """Pruning must apply below the root, never to the root's own path.
+
+    Pointing the scanner at something inside `site-packages` or `build` used to
+    skip every file and report the project ready -- a false all-clear, the worst
+    answer a compliance tool can give.
+    """
+    target = tmp_path / "site-packages" / "mylib"
+    target.mkdir(parents=True)
+    (target / "m.py").write_text('cnpj = int(row["cnpj"])\n', encoding="utf-8")
+
+    explicit = scan_path(target)
+    assert explicit.files_scanned == 1
+    assert explicit.breaks
+
+    # From above it, the same directory is correctly treated as a dependency.
+    from_parent = scan_path(tmp_path)
+    assert from_parent.files_scanned == 0
+
+
+def test_empty_scan_is_not_reported_as_ready(tmp_path) -> None:
+    """ "I could not look" must never render as "you are ready"."""
+    (tmp_path / "notes.md").write_text("no source here\n", encoding="utf-8")
+    result = scan_path(tmp_path)
+    assert result.files_scanned == 0
+    assert result.scanned_nothing is True
+    assert result.is_clean is False
+    assert result.to_dict()["pronto_para_2026"] is False
+    assert result.to_dict()["nada_analisado"] is True
+
+
+def test_scanned_files_with_no_findings_are_clean(tmp_path) -> None:
+    (tmp_path / "ok.py").write_text("from fiscalkit import is_valid_cnpj\n", encoding="utf-8")
+    result = scan_path(tmp_path)
+    assert result.files_scanned == 1
+    assert result.scanned_nothing is False
+    assert result.is_clean is True
+
+
+# ---------------------------------------------------------------------------
+# CNPJ002 must not fire on the other dotted-numeric masks in Brazilian code
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("code", "label"),
+    [
+        ('VERSION_RE = re.compile(r"^\\d{2}\\.\\d{3}$")', "version string"),
+        ('DATE_RE = re.compile(r"\\d{2}\\.\\d{3}\\.\\d{4}")', "dotted date"),
+        ('COORD = r"[0-9]{2}\\.[0-9]{3}"', "coordinates"),
+        ('CEP_RE = re.compile(r"\\d{2}\\.\\d{3}-\\d{3}")', "CEP"),
+        ('CPF_RE = re.compile(r"\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}")', "CPF"),
+        ('ROUTE = r"\\d{3}/\\d{4}"', "route id with no CNPJ nearby"),
+    ],
+)
+def test_cnpj_mask_rule_ignores_other_masks(code: str, label: str) -> None:
+    """CEP is the one that matters most: it is in every Brazilian address form.
+
+    An earlier version of this rule matched only the leading ``\\d{2}\\.\\d{3}``
+    and fired on all of these. A Brazilian tool that cries wolf on a CEP regex
+    gets uninstalled the same afternoon.
+    """
+    assert "CNPJ002" not in _ids(code), f"false positive on {label}"
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        'cnpj_mask = re.compile(r"^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$")',
+        'CNPJ = r"[0-9]{2}\\.[0-9]{3}\\.[0-9]{3}/[0-9]{4}-[0-9]{2}"',
+    ],
+)
+def test_cnpj_mask_rule_still_catches_the_real_thing(code: str) -> None:
+    """The /0000 branch group is what distinguishes a CNPJ mask from the rest."""
+    assert "CNPJ002" in _ids(code)
+
+
+# ---------------------------------------------------------------------------
+# The multi-language claim, verified against idiomatic code in each
+# ---------------------------------------------------------------------------
+
+LANGUAGE_CASES = [
+    ("javascript", "const CNPJ_RE = /^\\d{14}$/;\nconst cnpj = row.cnpj;", "numeric regex"),
+    ("javascript", "const cnpj = parseInt(row.cnpj, 10);", "parseInt"),
+    ("javascript", 'const cnpj = String(row.cnpj).padStart(14, "0");', "chained padStart"),
+    ("javascript", 'const cnpj = raw.replace(/\\D/g, "");', "strip non-digits"),
+    ("typescript", "const cnpj: number = Number(payload.cnpj);", "Number()"),
+    ("php", '$cnpj = preg_replace("/[^0-9]/", "", $raw_cnpj);', "preg_replace"),
+    ("php", "if (!ctype_digit($cnpj)) { throw new Exception(); }", "ctype_digit"),
+    ("php", '$cnpj = str_pad($cnpj, 14, "0", STR_PAD_LEFT);', "str_pad as argument"),
+    ("php", '$cnpj = intval($row["cnpj"]);', "intval"),
+    ("go", "cnpj, err := strconv.Atoi(row.CNPJ)", "strconv.Atoi"),
+    ("csharp", "int cnpj = Int32.Parse(row.Cnpj);", "Int32.Parse"),
+    ("csharp", "public long Cnpj { get; set; }", "long property"),
+    ("csharp", "cnpj = cnpj.PadLeft(14, '0');", "PadLeft"),
+    ("ruby", "cnpj = row[:cnpj].to_i", "to_i after subscript"),
+    ("ruby", 'cnpj = raw.gsub(/\\D/, "")', "gsub strip"),
+    ("java", "Long cnpj = Long.parseLong(row.getCnpj());", "parseLong"),
+    ("java", "private BigInteger cnpj;", "type-first field declaration"),
+    ("sql", "ALTER TABLE empresa ADD COLUMN cnpj NUMERIC(14);", "numeric column"),
+    ("sql", "cnpj DECIMAL(14,0) NOT NULL", "decimal column"),
+]
+
+
+@pytest.mark.parametrize(("language", "code", "label"), LANGUAGE_CASES)
+def test_idiomatic_breakage_is_caught_in_every_claimed_language(
+    language: str, code: str, label: str
+) -> None:
+    """The README claims eight languages; each must fire on idiomatic code.
+
+    The rules were written Python-first and originally missed eight of these --
+    Go's `strconv.Atoi`, C#'s `Int32.Parse` and `long Cnpj { get; set; }`,
+    Ruby's `row[:cnpj].to_i`, PHP's `intval` and argument-position `str_pad`,
+    Java's type-first field declaration, and chained `padStart`. A documented
+    claim that the code does not honour is the same defect as a wrong one.
+    """
+    assert scan_text(code, language=language), f"{language}: missed {label}"
+
+
+# ---------------------------------------------------------------------------
+# Precision after widening those rules
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("code", "label"),
+    [
+        ('print("CNPJ alfanumerico encontrado")', "print() with CNPJ in a string"),
+        ("sprint(cnpj)", "sprint"),
+        ("PhoneNumber(cnpj)", "PhoneNumber"),
+        ('total = int(row["quantity"])', "unrelated int cast"),
+        ("name = str_pad($nome, 20)", "unrelated str_pad"),
+        ("id = row[:order_id].to_i", "unrelated to_i"),
+        ("private BigInteger valorTotal;", "unrelated BigInteger field"),
+        ("public long OrderId { get; set; }", "unrelated long property"),
+        ("n, _ := strconv.Atoi(row.Quantity)", "unrelated Atoi"),
+        ("if not cnpj[12:].isdigit(): return False", "the correct 2026 slice check"),
+    ],
+)
+def test_widened_rules_did_not_lose_precision(code: str, label: str) -> None:
+    """Widening for other languages must not start flagging unrelated code."""
+    assert scan_text(code, language="python") == [], f"false positive on {label}"
+
+
+def test_prose_quoting_a_pattern_is_reported() -> None:
+    """A docstring describing a numeric CNPJ rule is reported, by design.
+
+    The scanner reads lines rather than parsing each of eight languages, so it
+    cannot distinguish a regex in code from one quoted in a docstring. Rather
+    than suppress the class, this is left as a finding: documentation that
+    describes a numeric-only CNPJ rule usually deserves the same review as code
+    that implements one. `fiscalkit`'s own rules module reports for this reason.
+    """
+    docstring = '"""Finds a ^\\d{14}$ regex used to validate a cnpj."""'
+    assert "CNPJ001" in _ids(docstring)
+    # A `#` comment is still skipped -- that is a separate, deliberate rule.
+    assert scan_text("# a ^\\d{14}$ regex for cnpj", language="python") == []
+
+
+# ---------------------------------------------------------------------------
+# Pruning and bundled output must be visible, never silent
+# ---------------------------------------------------------------------------
+
+
+def test_pruning_is_counted_and_reported(tmp_path) -> None:
+    """A published npm package keeps its only copy of the code in `dist`.
+
+    Scanning one used to prune every file and report the package ready without
+    having read a line of it -- the same false all-clear as the site-packages
+    bug, reached by a different route. What pruning hides is now counted.
+    """
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "bundle.js").write_text("const cnpj = parseInt(row.cnpj, 10);\n", encoding="utf-8")
+    (tmp_path / "index.js").write_text("export {};\n", encoding="utf-8")
+
+    pruned = scan_path(tmp_path)
+    assert pruned.files_pruned == 1
+    assert pruned.pruned == {"dist": 1}
+    assert pruned.to_dict()["arquivos_podados"] == 1
+
+    # Turning pruning off reaches the code and finds the defect.
+    everything = scan_path(tmp_path, prune=False)
+    assert everything.files_pruned == 0
+    assert everything.breaks
+
+
+def test_pruning_only_counts_files_it_would_have_read(tmp_path) -> None:
+    """A PNG inside dist/ is not a file the scan was ever going to open."""
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (dist / "app.js").write_text("var x = 1;\n", encoding="utf-8")
+    assert scan_path(tmp_path).files_pruned == 1
+
+
+def test_minified_bundles_are_set_aside_and_counted(tmp_path) -> None:
+    """A finding on line 1 of a minified bundle is unactionable.
+
+    The excerpt is a meaningless slice of one enormous line, and the fix belongs
+    in the original source, which is elsewhere. Set aside, but counted, because
+    silently ignoring files is the failure mode this project keeps hitting.
+    """
+    (tmp_path / "app.min.js").write_text(
+        "var a=1;/*" + "z" * 3000 + "*/ var cnpj=parseInt(x.cnpj);\n", encoding="utf-8"
+    )
+    (tmp_path / "src.js").write_text("const cnpj = parseInt(row.cnpj, 10);\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+    assert result.files_minified == 1
+    assert result.files_scanned == 1
+    assert result.to_dict()["arquivos_minificados"] == 1
+    # The real source is still reported.
+    assert result.breaks
+    assert all("min.js" not in f.path for f in result.findings)
+
+
+def test_ordinary_long_lines_are_still_scanned(tmp_path) -> None:
+    """The threshold must not exclude merely verbose real code."""
+    line = 'cnpj = int(row["cnpj"])  # ' + "x" * 500 + "\n"
+    (tmp_path / "verbose.py").write_text(line, encoding="utf-8")
+    result = scan_path(tmp_path)
+    assert result.files_minified == 0
+    assert result.breaks
+
+
+def test_numeric_column_claim_matches_observed_database_behaviour() -> None:
+    """The CNPJ011 explanation is executed here, not merely asserted.
+
+    A strict engine rejects an alphanumeric CNPJ. SQLite's default type affinity
+    instead stores it as TEXT in a column declared BIGINT, which is the more
+    dangerous outcome: the column ends up holding integers and text together and
+    nothing fails until a join or an ORDER BY touches it.
+    """
+    import sqlite3
+
+    legacy, alpha = "11222333000181", "12ABC34501DE35"
+
+    lax = sqlite3.connect(":memory:")
+    lax.execute("CREATE TABLE f (cnpj BIGINT NOT NULL)")
+    lax.execute("INSERT INTO f VALUES (?)", (legacy,))
+    lax.execute("INSERT INTO f VALUES (?)", (alpha,))
+    types = [row[0] for row in lax.execute("SELECT typeof(cnpj) FROM f ORDER BY rowid")]
+    assert types == ["integer", "text"], types  # mixed types in one column
+
+    strict = sqlite3.connect(":memory:")
+    strict.execute("CREATE TABLE f (cnpj INTEGER NOT NULL) STRICT")
+    strict.execute("INSERT INTO f VALUES (?)", (legacy,))
+    with pytest.raises(sqlite3.IntegrityError):
+        strict.execute("INSERT INTO f VALUES (?)", (alpha,))
+
+    # The rule text must describe both outcomes, since a reader on SQLite who is
+    # told only "cannot store" will conclude, wrongly, that they are unaffected.
+    rule = next(r for r in RULES if r.id == "CNPJ011")
+    lowered = rule.explanation.lower()
+    assert "rejeit" in lowered
+    assert "text" in lowered and "sqlite" in lowered
+
+
+def test_numeric_coercion_claim_distinguishes_nan_from_truncation() -> None:
+    """CNPJ004 matches both `Number()` and `parseInt()`, which fail differently.
+
+    `Number("12ABC34501DE35")` is NaN, which is loud. `parseInt` on the same value
+    returns 12 -- a plausible number that reaches a database and is discovered much
+    later. An earlier version of this rule promised NaN for both, which would have
+    told a reader using `parseInt` to expect a failure they will never see.
+    """
+    rule = next(r for r in RULES if r.id == "CNPJ004")
+    lowered = rule.explanation.lower()
+    assert "nan" in lowered
+    assert "trunca" in lowered, "the silent parseInt case must be described"
+    assert "12" in rule.explanation, "the concrete truncated value earns its place"
+
+    # Both spellings are still detected.
+    assert "CNPJ004" in _ids("const n = Number(row.cnpj);", "javascript")
+    assert "CNPJ004" in _ids("const n = parseInt(row.cnpj, 10);", "javascript")
+
+
+# ---------------------------------------------------------------------------
+# Schema and interface-definition formats
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("code", "language", "label"),
+    [
+        ("    cnpj:\n      type: integer", "yaml", "OpenAPI field typed integer"),
+        ('{"cnpj": {"type": "int64"}}', "json", "JSON Schema int64"),
+        ("int64 cnpj = 1;", "protobuf", "protobuf scalar field"),
+        ("  cnpj Int @unique", "prisma", "prisma model field"),
+        ("  cnpj Int", "prisma", "prisma field at end of line"),
+        ("  Cnpj int64", "go", "Go struct field"),
+    ],
+)
+def test_schema_formats_are_covered(code: str, language: str, label: str) -> None:
+    """A CNPJ typed as an integer in a spec propagates into every generated stub.
+
+    These formats were unreachable before: `.proto`, `.prisma` and `.graphql`
+    were not recognised at all, and OpenAPI puts the type on its own line under
+    the field name, which no single-line rule could see.
+    """
+    assert scan_text(code, language=language), f"missed {label}"
+
+
+@pytest.mark.parametrize(
+    ("code", "language", "label"),
+    [
+        ("    quantidade:\n      type: integer", "yaml", "unrelated integer field"),
+        ('{"idade": {"type": "integer"}}', "json", "unrelated JSON Schema field"),
+        ("int64 order_id = 1;", "protobuf", "unrelated proto field"),
+        ("  id   Int  @id", "prisma", "unrelated prisma field"),
+        ('print("cnpj integer")', "python", "prose in a string literal"),
+        ('msg = "cnpj int"', "python", "another string literal"),
+        ("cnpj_int_helper()", "python", "identifier containing both words"),
+    ],
+)
+def test_schema_rules_do_not_fire_on_unrelated_declarations(
+    code: str, language: str, label: str
+) -> None:
+    """`print("cnpj integer")` is a sentence, not a field declaration.
+
+    CNPJ015 originally matched it, since prose puts the same two words together.
+    It now requires the shape of a declaration: end of line, an attribute, or
+    punctuation after the type, never a closing quote.
+    """
+    assert scan_text(code, language=language) == [], f"false positive on {label}"
+
+
+def test_new_formats_are_recognised() -> None:
+    for name, expected in [
+        ("schema.proto", "protobuf"),
+        ("schema.prisma", "prisma"),
+        ("api.graphql", "graphql"),
+        ("event.avsc", "json"),
+    ]:
+        assert language_of(name) == expected, name
+
+
+def test_no_duplicate_rules_on_one_line_in_the_fixture() -> None:
+    """Two rules reporting the same defect is noise a reader must reconcile.
+
+    `cnpj BIGINT` briefly matched both CNPJ011, which owns numeric SQL columns,
+    and CNPJ015, which is for the separator-less `cnpj Int` form. CNPJ015 is now
+    scoped away from SQL rather than the expected count being raised to absorb it.
+    """
+    import collections
+    from pathlib import Path
+
+    fixture = Path(__file__).resolve().parent / "fixtures" / "legacy_project"
+    findings = scan_path(fixture).findings
+    per_line = collections.Counter((f.path, f.line) for f in findings)
+    duplicates = {loc: n for loc, n in per_line.items() if n > 1}
+    assert not duplicates, f"the same line reported by several rules: {duplicates}"
+
+
+def test_sql_numeric_column_is_owned_by_one_rule() -> None:
+    ids = {f.rule_id for f in scan_text("cnpj BIGINT NOT NULL UNIQUE", language="sql")}
+    assert ids == {"CNPJ011"}
+
+
+def test_helper_a_few_lines_from_the_cnpj_mention_is_found(tmp_path) -> None:
+    """The layout that a two-line context window missed.
+
+    A normalization helper is routinely several lines from the nearest mention
+    of a CNPJ: the function is named `normalizar`, the caller passes `cnpj`, and
+    the module constant sits above the imports. With a two-line window the
+    silent `re.sub(r"\\D", ...)` corruption -- the most dangerous rule here --
+    went unreported in exactly the code it targets.
+    """
+    (tmp_path / "validators.py").write_text(
+        "import re\n"
+        "\n"
+        'CNPJ_RE = re.compile(r"^\\d{14}$")\n'
+        "\n"
+        "\n"
+        "def normalizar(valor):\n"
+        '    return re.sub(r"\\D", "", valor)\n',
+        encoding="utf-8",
+    )
+    found = {f.rule_id for f in scan_path(tmp_path).findings}
+    assert "CNPJ021" in found, "the silent-corruption pattern must be reported"
+    assert "CNPJ001" in found
+
+
+def test_context_window_stays_within_the_measured_safe_range() -> None:
+    """The window was chosen by measurement; keep it inside what was measured.
+
+    Any value from 4 to 15 found the helper above and reported nothing across
+    3,225 third-party files, 41 files of the reference libraries and 240 files of
+    Brazilian npm packages. Cost appears beyond that range, not inside it.
+    """
+    from fiscalkit.scan.scanner import CONTEXT_LINES
+
+    assert 4 <= CONTEXT_LINES <= 15
+
+
+def test_a_fixed_project_scans_clean(tmp_path) -> None:
+    """The other half of the journey: applying each `correcao` reaches zero."""
+    (tmp_path / "validators.py").write_text(
+        "import re\n"
+        "\n"
+        "from fiscalkit import is_valid_cnpj\n"
+        "\n"
+        'CNPJ_RE = re.compile(r"^[0-9A-Z]{12}[0-9]{2}$")\n'
+        "\n"
+        "\n"
+        "def normalizar(valor):\n"
+        '    return re.sub(r"[^0-9A-Z]", "", valor.upper())\n'
+        "\n"
+        "\n"
+        "def validar(cnpj):\n"
+        "    return is_valid_cnpj(normalizar(cnpj))\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "models.py").write_text(
+        "cnpj = models.CharField(max_length=14, unique=True)\n", encoding="utf-8"
+    )
+    (tmp_path / "schema.sql").write_text(
+        "CREATE TABLE f (cnpj CHAR(14) NOT NULL UNIQUE);\n", encoding="utf-8"
+    )
+    result = scan_path(tmp_path)
+    assert result.is_clean, [f"{f.rule_id} {f.path}:{f.line}" for f in result.findings]
+
+
+def test_documented_rule_counts_match_the_ruleset() -> None:
+    """Prose that states how many rules there are must not drift from the code.
+
+    "Twelve rules" outlived the twelfth rule in four separate documents this
+    session, including the two written to be published verbatim. A number in
+    prose has no compiler, so it gets one here: every "N rules"/"N regras" claim
+    in the repository's markdown has to equal ``len(RULES)``.
+
+    Skipped when the docs are not on disk, so an installed wheel still tests
+    clean.
+    """
+    import re
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    docs = [p for p in repo.rglob("*.md") if "node_modules" not in p.parts]
+    if not docs:
+        pytest.skip("documentation not present alongside the package")
+
+    claim = re.compile(r"\b(\d+|[Tt]welve|[Tt]hirteen|[Ff]ourteen|[Ff]ifteen)\s+(?:rules|regras)\b")
+    words = {"twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15}
+
+    wrong: list[str] = []
+    for path in docs:
+        for raw in claim.findall(path.read_text(encoding="utf-8")):
+            value = words.get(raw.lower()) or int(raw)
+            if value != len(RULES):
+                wrong.append(f"{path.relative_to(repo)}: claims {raw}, there are {len(RULES)}")
+
+    assert not wrong, "stale rule counts in documentation: " + "; ".join(wrong)
+
+
+def test_package_ships_a_pep561_marker() -> None:
+    """The `Typing :: Typed` claim has to be true in the installed package.
+
+    `pyproject.toml` declares the ``Typing :: Typed`` classifier and the README
+    carries a mypy-strict badge, but PEP 561 says a package without a ``py.typed``
+    marker is to be treated as untyped no matter how well annotated it is. Without
+    the marker, a consumer running mypy does not merely lose the annotations: the
+    import itself errors with "missing library stubs or py.typed marker", so this
+    package breaks their type check while advertising the opposite.
+    """
+    from pathlib import Path
+
+    import fiscalkit
+
+    marker = Path(fiscalkit.__file__).parent / "py.typed"
+    assert marker.is_file(), f"PEP 561 marker missing at {marker}"
+
+
+def test_scanning_a_single_file_names_that_file(tmp_path) -> None:
+    """A single-file scan must report the file, not ".".
+
+    ``path.relative_to(base)`` is "." when they are the same path, so pointing the
+    scanner at a file used to produce a finding whose path named nothing. It was
+    not only cosmetic: the "." reached the SARIF ``artifactLocation.uri``, where a
+    relative path is what GitHub anchors its annotations on.
+    """
+    target = tmp_path / "fornecedor.py"
+    target.write_text('import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8")
+
+    result = scan_path(target)
+    assert result.findings, "the fixture must produce a finding for this to mean anything"
+    assert {f.path for f in result.findings} == {"fornecedor.py"}
+
+
+def test_fix_works_when_the_target_is_a_single_file(tmp_path) -> None:
+    """`--fix` on one file must rewrite it, not quietly decline.
+
+    The "." path resolved back to the containing directory, so reading the file to
+    patch it raised ``IsADirectoryError``, which the patch builder swallows along
+    with genuinely unreadable files. The CLI then told the user no automatic fix
+    was available for a finding that has one: a wrong answer delivered quietly,
+    which is precisely the failure this tool exists to find in other code.
+    """
+    target = tmp_path / "fornecedor.py"
+    target.write_text('import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8")
+
+    result = scan_path(target)
+    patches = build_patches(result.findings, target.parent)
+    assert patches, "a fixable finding on a single file must yield a patch"
+
+    apply_patches(patches)
+    rewritten = target.read_text(encoding="utf-8")
+    assert "[0-9A-Z]{12}[0-9]{2}" in rewritten
+    assert "\\d{14}" not in rewritten
+    assert not scan_path(target).findings
+
+
+def test_fix_preserves_line_endings_and_bom(tmp_path) -> None:
+    """`--fix` must change the line it targets and nothing else, byte for byte.
+
+    `Path.read_text` opens in universal-newline mode, so every CRLF came back as a
+    bare LF and writing the string out again rewrote the whole file. A one-line
+    regex fix in a Windows-authored tree then arrived as a diff touching every
+    line, which destroys the reviewability that is the entire point of emitting a
+    patch instead of a description. Brazilian enterprise codebases are full of
+    CRLF, so this was the common case, not an exotic one.
+    """
+    crlf = tmp_path / "win.py"
+    body = 'import re\r\nCNPJ_RE = re.compile(r"^\\d{14}$")\r\nOUTRA = 1\r\n'
+    crlf.write_bytes(b"\xef\xbb\xbf" + body.encode("utf-8"))
+
+    lf = tmp_path / "unix.py"
+    lf.write_bytes(b'import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n')
+
+    patches = build_patches(scan_path(tmp_path).findings, tmp_path)
+    assert len(patches) == 2, [p.path.name for p in patches]
+    apply_patches(patches)
+
+    after_crlf = crlf.read_bytes()
+    assert after_crlf.count(b"\r\n") == 3, "CRLF endings were rewritten"
+    assert after_crlf.count(b"\n") - after_crlf.count(b"\r\n") == 0, "a bare LF was introduced"
+    assert after_crlf.startswith(b"\xef\xbb\xbf"), "the BOM was dropped"
+    assert b"[0-9A-Z]{12}[0-9]{2}" in after_crlf, "the fix was not applied"
+    # Only the offending line may differ.
+    assert after_crlf.count(b"OUTRA = 1\r\n") == 1
+
+    after_lf = lf.read_bytes()
+    assert b"\r\n" not in after_lf, "CRLF was introduced into an LF file"
+    assert b"[0-9A-Z]{12}[0-9]{2}" in after_lf
+
+
+def test_emitted_diff_for_a_crlf_file_touches_one_line(tmp_path) -> None:
+    """The unified diff must carry the CR through, so the hunk stays one line.
+
+    A diff whose context lines have had their endings normalised does not apply
+    cleanly against the original file, and where it does apply it rewrites
+    everything it touches.
+    """
+    target = tmp_path / "win.py"
+    body = 'import re\r\nCNPJ_RE = re.compile(r"^\\d{14}$")\r\nOUTRA = 1\r\n'
+    target.write_bytes(body.encode("utf-8"))
+
+    patches = build_patches(scan_path(target).findings, target.parent)
+    diff = unified_diff(patches, target.parent)
+
+    added = [ln for ln in diff.splitlines(keepends=True) if ln.startswith("+") and ln[1:2] != "+"]
+    removed = [ln for ln in diff.splitlines(keepends=True) if ln.startswith("-") and ln[1:2] != "-"]
+    assert len(added) == 1, added
+    assert len(removed) == 1, removed
+    assert added[0].endswith("\r\n"), repr(added[0])
+
+
+def test_standalone_ci_matches_the_workflow_that_runs() -> None:
+    """The CI the project keeps must equal the CI that is actually proven here.
+
+    While the project lives in a subdirectory, GitHub runs the profile repo's
+    workflow and never runs this package's own `.github/workflows/ci.yml`. So
+    that file went stale silently: written in the first commit with two jobs,
+    while the workflow that runs grew to seven -- including every job that has
+    caught a real bug. Extracting the project would have swapped a CI that proves
+    things for one that does not, under a README badge pointing at the weaker one
+    and claiming otherwise.
+
+    Skipped once the project is extracted, when there is no profile-repo workflow
+    left to compare against and this file simply is the CI.
+    """
+    import sys
+    from pathlib import Path
+
+    package_root = Path(__file__).resolve().parents[1]
+    source = package_root.parent / ".github" / "workflows" / "fiscalkit.yml"
+    target = package_root / ".github" / "workflows" / "ci.yml"
+    if not source.is_file():
+        pytest.skip("no profile-repo workflow to sync from; the project is standalone")
+
+    sys.path.insert(0, str(package_root / "tools"))
+    try:
+        import sync_ci
+    finally:
+        sys.path.pop(0)
+
+    expected = sync_ci.render(source.read_text(encoding="utf-8"))
+    assert target.read_text(encoding="utf-8") == expected, (
+        "the standalone CI is out of date; run: python tools/sync_ci.py"
+    )

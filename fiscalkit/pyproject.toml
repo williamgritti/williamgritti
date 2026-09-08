@@ -1,0 +1,97 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fiscalkit"
+version = "0.1.0"
+description = "Brazilian fiscal documents for Python and AI agents: CPF, CNPJ (including the 2026 alphanumeric format), NF-e access keys and NF-e XML."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "William Gritti" }]
+keywords = [
+    "brazil", "brasil", "fiscal", "nfe", "nf-e", "nfce", "sped",
+    "cnpj", "cpf", "cnpj-alfanumerico", "sefaz", "danfe",
+    "mcp", "model-context-protocol", "tax", "invoice",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Portuguese (Brazilian)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Accounting",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.2.0"]
+dev = ["pytest>=8.0", "mypy>=1.8", "ruff>=0.6", "pyyaml>=6.0"]
+
+[project.scripts]
+fiscalkit = "fiscalkit.cli:main"
+fiscalkit-mcp = "fiscalkit.mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/williamgritti/fiscalkit"
+Repository = "https://github.com/williamgritti/fiscalkit"
+Issues = "https://github.com/williamgritti/fiscalkit/issues"
+Changelog = "https://github.com/williamgritti/fiscalkit/blob/main/CHANGELOG.md"
+# PyPI renders these as sidebar links. Someone who finds the package there
+# rather than on GitHub otherwise has no way back to a person.
+Discussions = "https://github.com/williamgritti/fiscalkit/discussions"
+Author = "https://github.com/williamgritti"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fiscalkit"]
+
+# List what belongs in the sdist explicitly. The default sweeps in whatever
+# happens to be in the working tree -- a local virtualenv, for one, whose
+# absolute symlinks make the tarball unbuildable.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/CONTRIBUTING.md",
+    "/pyproject.toml",
+    "/action.yml",
+    "/.pre-commit-hooks.yaml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["fiscalkit"]
+mypy_path = "src"
+strict = true
+warn_unreachable = true
+# The mcp 1.x/2.x import fallback needs an ignore that is unused in one of the
+# two supported configurations, so this must not be an error.
+warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
+module = ["mcp.*"]
+ignore_missing_imports = true
