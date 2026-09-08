@@ -271,6 +271,11 @@ Verified by execution in this session:
 - The MCP server started as a real process and driven over the stdio protocol:
   `initialize` negotiates, `tools/list` returns all ten tools, and each one
   answers correctly — including the error paths, which is where it was wrong
+- The pre-commit hook run through the framework, from a standalone repository
+  built exactly as step 1 above describes: it installs its own environment, passes
+  on a clean tree, and fails with exit 1 on one that has breakage, blocking the
+  commit. That also exercises step 1 itself -- the layout, `.pre-commit-hooks.yaml`
+  and the `v0.1.0` tag all work as a pre-commit `rev`
 - Every technical claim in `LAUNCH.md`
 
 Not verified, because it cannot be from here:
