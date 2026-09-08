@@ -241,16 +241,17 @@ skipped on the CNPJ angle and had to be wrong twice to recover from.
 
 Verified by execution in this session:
 
-- **300 tests** with the MCP extra and both reference libraries installed; 284
+- **305 tests** with the MCP extra and both reference libraries installed; 289
   of them need neither. `ruff`, `ruff format` and `mypy --strict` clean under
   each configuration
-- A mutation sweep over the six modules that carry the logic: **69 mutations, 66
-  killed.** The three survivors are equivalent mutants — two drop a `not` inside
-  the text of an error message, and the third is an `except` branch already
-  marked unreachable. The sweep itself had to be fixed before it could be
-  trusted: Python caches bytecode on (mtime, size), so two mutations of the same
-  file with identical size in the same second reused each other's `.pyc` and
-  looked like survivors
+- A mutation sweep over every module that carries logic: **99 mutations, 95
+  killed.** All four survivors are equivalent mutants — two drop a `not` inside
+  the text of an error message, one is an `except` branch already marked
+  unreachable, and one is a trailing comment. Every mutation that changes
+  behaviour is caught by a test. The sweep itself had to be fixed before it
+  could be trusted: Python caches bytecode on (mtime, size), so two mutations of
+  one file with identical size in the same second reused each other's `.pyc`,
+  never ran, and looked like survivors
 - **60,000 differential cases** against `brutils` and `validate-docbr`, two
   implementations written by other people from the same published rules: zero
   disagreements. Guarded against passing vacuously, and verified by sabotage —

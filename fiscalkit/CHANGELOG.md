@@ -96,6 +96,25 @@ only the human-readable values changed.
 Long remediation text also wraps to a hanging indent instead of running past 140
 columns, which is the part of a report a reader skips.
 
+### Five more untested guards, found by extending the mutation sweep
+
+Each of these was correct code that no test held in place, so any of them could
+have been inverted by a refactor with the suite staying green:
+
+- The NF-e totals tolerance boundary. `<=` and `<` were indistinguishable to the
+  suite, and the difference is whether a correctly rounded nota is reported as
+  broken.
+- `--incluir-tudo`, in both places it is read. Inverting it makes the default
+  scan descend into `node_modules`, and makes the flag prune instead of include.
+  Pruning is where the earlier false all-clear came from.
+- The post-fix re-scan's pruning, separately: inverted, it counts vendored
+  dependencies as remaining work, immediately after the tool rewrote the user's
+  files.
+- `_emit`'s failure guard. Inverted, it prints a reason on success and stays
+  silent on failure. No test had looked at stderr for either case.
+- `_reason_text`'s fallback, which had never been reached: an unrecognised reason
+  code raised KeyError at the user instead of degrading to the raw detail.
+
 ### The rule that check digits stay numeric was never tested
 
 IN RFB 2.229/2024 widens the first twelve positions of a CNPJ and leaves the last

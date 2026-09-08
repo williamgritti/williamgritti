@@ -535,3 +535,92 @@ def test_mcp_server_instructions_are_written_in_correct_portuguese() -> None:
     assert not _misspellings_in(instructions), (
         f"unaccented Portuguese in MCP instructions: {_misspellings_in(instructions)}"
     )
+
+
+def test_incluir_tudo_controls_pruning_and_the_default_prunes(tmp_path, capsys) -> None:
+    """The flag's sense was untested, so inverting it went unnoticed.
+
+    Pruning is not a detail: reading `node_modules` by default makes a scan of any
+    real project slow and noisy, and NOT reading it when asked to is how the
+    earlier false all-clear happened. Both directions are asserted here because
+    the mutation that swaps them is a single dropped `not`.
+    """
+    (tmp_path / "app").mkdir()
+    (tmp_path / "node_modules").mkdir()
+    (tmp_path / "app" / "f.py").write_text(
+        'import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8"
+    )
+    (tmp_path / "node_modules" / "dep.js").write_text(
+        "var CNPJ_RE = /^\\d{14}$/;\n", encoding="utf-8"
+    )
+
+    assert main(["scan", str(tmp_path), "--json"]) == 1
+    pruned = json.loads(capsys.readouterr().out)
+    assert pruned["arquivos_analisados"] == 1, "the default must skip node_modules"
+    assert pruned["arquivos_podados"] == 1
+    assert "node_modules" in pruned["diretorios_podados"]
+
+    assert main(["scan", str(tmp_path), "--incluir-tudo", "--json"]) == 1
+    everything = json.loads(capsys.readouterr().out)
+    assert everything["arquivos_analisados"] == 2, "--incluir-tudo must read node_modules"
+    assert everything["arquivos_podados"] == 0
+
+
+def test_the_failure_reason_goes_to_stderr_and_success_is_quiet(capsys) -> None:
+    """`_emit` prints the reason only when the payload reports failure.
+
+    Dropping the `not` from its guard inverts that: reasons on success, silence on
+    failure. Nothing caught it, because no test looked at stderr for either case.
+    """
+    assert main(["cnpj", "11222333000182"]) == 1
+    failed = capsys.readouterr()
+    assert "motivo:" in failed.err
+    assert "não conferem" in failed.err
+
+    assert main(["cnpj", "12ABC34501DE35"]) == 0
+    ok = capsys.readouterr()
+    assert ok.err == "", f"a successful command must print nothing to stderr: {ok.err!r}"
+
+
+def test_an_untranslated_reason_code_falls_back_instead_of_crashing(capsys) -> None:
+    """The fallback in `_reason_text` had never been reached.
+
+    Every code the library raises has a translation, enforced by its own test, so
+    the only way here is a payload from elsewhere. It must degrade to the raw
+    detail rather than raise KeyError at the user.
+    """
+    from fiscalkit.cli import _reason_text
+
+    assert _reason_text({"motivo": "check_digit"}) == "dígitos verificadores não conferem"
+    assert _reason_text({"motivo": "codigo_novo", "detalhe": "algo inesperado"}) == (
+        "algo inesperado"
+    )
+    assert _reason_text({"motivo": "codigo_novo"}) == "codigo_novo"
+
+
+def test_fix_respects_pruning_when_counting_what_remains(tmp_path, capsys) -> None:
+    """The re-scan after `--fix` prunes too, so its count means what it says.
+
+    `--fix` scans, patches, then scans again to report what is left for a human.
+    That second scan has its own pruning argument, and inverting it makes the
+    remaining-work count include vendored dependencies -- telling the user there
+    is work left in code they do not own, right after the tool rewrote their
+    files. The first scan's pruning was covered; this one was not.
+    """
+    (tmp_path / "app").mkdir()
+    (tmp_path / "node_modules").mkdir()
+    (tmp_path / "app" / "f.py").write_text(
+        'import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8"
+    )
+    (tmp_path / "node_modules" / "dep.js").write_text(
+        "var CNPJ_RE = /^\\d{14}$/;\n", encoding="utf-8"
+    )
+
+    assert main(["scan", str(tmp_path), "--fix"]) == 0
+    out = capsys.readouterr().out
+    assert "1 arquivo(s) alterado(s)" in out
+    assert "0 ocorrência(s) restante(s)" in out, (
+        "the vendored file must not be counted as remaining work"
+    )
+    # And the vendored file must be untouched.
+    assert "\\d{14}" in (tmp_path / "node_modules" / "dep.js").read_text(encoding="utf-8")

@@ -334,3 +334,22 @@ def test_unparseable_amount_degrades_to_zero() -> None:
     parsed = parse_nfe(broken)
     assert parsed.items[0].product.total == Decimal("0")
     assert parsed.totals.invoice_total == Decimal("233.90")
+
+
+def test_totals_tolerance_boundary_is_inclusive() -> None:
+    """A difference of exactly one cent reconciles; one cent and a bit does not.
+
+    The tolerance exists to absorb the rounding the NF-e layout itself permits,
+    so the boundary value has to be allowed -- that is what "allowed absolute
+    difference" means. Nothing tested the boundary, so `<=` and `<` were
+    indistinguishable to the suite, and the difference between them is whether a
+    correctly rounded nota is reported as broken.
+    """
+    exact = SAMPLE.replace("<vProd>226.40</vProd>", "<vProd>226.41</vProd>")
+    assert parse_nfe(exact).totals_reconcile() is True, "one cent must still reconcile"
+
+    under = SAMPLE.replace("<vProd>226.40</vProd>", "<vProd>226.39</vProd>")
+    assert parse_nfe(under).totals_reconcile() is True, "one cent under must reconcile too"
+
+    over = SAMPLE.replace("<vProd>226.40</vProd>", "<vProd>226.42</vProd>")
+    assert parse_nfe(over).totals_reconcile() is False, "two cents must not reconcile"
