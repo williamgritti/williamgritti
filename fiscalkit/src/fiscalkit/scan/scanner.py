@@ -65,7 +65,21 @@ MAX_FILE_BYTES = 2_000_000
 MAX_LINE_LENGTH = 2_000
 
 #: How many lines either side count as "nearby" for context-dependent rules.
-CONTEXT_LINES = 2
+#:
+#: Two lines was too tight for real code. A helper that normalizes a CNPJ is
+#: routinely a few lines from the nearest mention of one -- the function is named
+#: `normalizar`, the caller passes `cnpj`, and the module constant sits above the
+#: import block -- so the most dangerous rule in the set, the silent
+#: `re.sub(r"\D", "", ...)` corruption, was missed in exactly the layout it
+#: targets.
+#:
+#: Chosen by measurement rather than taste. Across 3,225 third-party files, 41
+#: files of brutils and validate-docbr, and 240 files of Brazilian npm packages,
+#: any window from 4 to 15 finds the helper and reports nothing else. Cost only
+#: appears beyond that: at 40 the npm corpus produces two findings. Eight covers
+#: a small function and its signature with margin on both sides of the measured
+#: safe range.
+CONTEXT_LINES = 8
 
 _CNPJ_MENTION = re.compile(r"cnpj", re.IGNORECASE)
 

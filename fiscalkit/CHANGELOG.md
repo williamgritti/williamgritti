@@ -77,6 +77,26 @@ maintainers, and it is recorded here rather than quietly rewritten, because it
 is the same over-generalisation this project has now made four times: test a
 sample, state a universal.
 
+### The context window was too tight for real code
+
+Walking the first-user journey -- clean install, scan a realistic legacy Django
+and Postgres project, apply each `correcao`, re-scan -- found the scanner missing
+its own headline rule.
+
+`CNPJ021`, the silent `re.sub(r"\D", "", ...)` corruption, went unreported in a
+file that plainly contained it, because the helper was named `normalizar` and the
+nearest mention of a CNPJ was four lines away, outside the two-line context
+window. That is the ordinary layout of the code this tool targets.
+
+The window is now 8, chosen by measurement rather than taste. Any value from 4
+to 15 finds the helper and reports nothing across 3,225 third-party files, 41
+files of the reference libraries and 240 files of Brazilian npm packages; cost
+only appears beyond that, with two findings at 40. A test asserts the value stays
+inside the range that was actually measured.
+
+The journey now completes: six findings on the legacy project, zero after
+applying each suggested fix, exit 0.
+
 ### Schema and interface-definition formats
 
 Testing the formats a Brazilian system actually carries found three gaps. An

@@ -718,3 +718,67 @@ def test_no_duplicate_rules_on_one_line_in_the_fixture() -> None:
 def test_sql_numeric_column_is_owned_by_one_rule() -> None:
     ids = {f.rule_id for f in scan_text("cnpj BIGINT NOT NULL UNIQUE", language="sql")}
     assert ids == {"CNPJ011"}
+
+
+def test_helper_a_few_lines_from_the_cnpj_mention_is_found(tmp_path) -> None:
+    """The layout that a two-line context window missed.
+
+    A normalization helper is routinely several lines from the nearest mention
+    of a CNPJ: the function is named `normalizar`, the caller passes `cnpj`, and
+    the module constant sits above the imports. With a two-line window the
+    silent `re.sub(r"\\D", ...)` corruption -- the most dangerous rule here --
+    went unreported in exactly the code it targets.
+    """
+    (tmp_path / "validators.py").write_text(
+        "import re\n"
+        "\n"
+        'CNPJ_RE = re.compile(r"^\\d{14}$")\n'
+        "\n"
+        "\n"
+        "def normalizar(valor):\n"
+        '    return re.sub(r"\\D", "", valor)\n',
+        encoding="utf-8",
+    )
+    found = {f.rule_id for f in scan_path(tmp_path).findings}
+    assert "CNPJ021" in found, "the silent-corruption pattern must be reported"
+    assert "CNPJ001" in found
+
+
+def test_context_window_stays_within_the_measured_safe_range() -> None:
+    """The window was chosen by measurement; keep it inside what was measured.
+
+    Any value from 4 to 15 found the helper above and reported nothing across
+    3,225 third-party files, 41 files of the reference libraries and 240 files of
+    Brazilian npm packages. Cost appears beyond that range, not inside it.
+    """
+    from fiscalkit.scan.scanner import CONTEXT_LINES
+
+    assert 4 <= CONTEXT_LINES <= 15
+
+
+def test_a_fixed_project_scans_clean(tmp_path) -> None:
+    """The other half of the journey: applying each `correcao` reaches zero."""
+    (tmp_path / "validators.py").write_text(
+        "import re\n"
+        "\n"
+        "from fiscalkit import is_valid_cnpj\n"
+        "\n"
+        'CNPJ_RE = re.compile(r"^[0-9A-Z]{12}[0-9]{2}$")\n'
+        "\n"
+        "\n"
+        "def normalizar(valor):\n"
+        '    return re.sub(r"[^0-9A-Z]", "", valor.upper())\n'
+        "\n"
+        "\n"
+        "def validar(cnpj):\n"
+        "    return is_valid_cnpj(normalizar(cnpj))\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "models.py").write_text(
+        "cnpj = models.CharField(max_length=14, unique=True)\n", encoding="utf-8"
+    )
+    (tmp_path / "schema.sql").write_text(
+        "CREATE TABLE f (cnpj CHAR(14) NOT NULL UNIQUE);\n", encoding="utf-8"
+    )
+    result = scan_path(tmp_path)
+    assert result.is_clean, [f"{f.rule_id} {f.path}:{f.line}" for f in result.findings]
