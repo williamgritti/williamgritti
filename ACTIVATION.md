@@ -290,9 +290,12 @@ skipped on the CNPJ angle and had to be wrong twice to recover from.
 
 Verified by execution in this session:
 
-- **309 tests** with the MCP extra and both reference libraries installed; 292
-  of them need neither. `ruff`, `ruff format` and `mypy --strict` clean under
-  each configuration
+- The suite passes in all three configurations — core, with the MCP extra, and
+  with the reference libraries — with `ruff`, `ruff format` and `mypy --strict`
+  clean under each. The counts are deliberately not written here: they changed
+  eight times in one session, and the copy above this line was wrong by one for
+  an hour without anything noticing. CI prints the real number on every run,
+  which is the only place it cannot go stale
 - A mutation sweep over every module that carries logic: **99 mutations, 95
   killed.** All four survivors are equivalent mutants — two drop a `not` inside
   the text of an error message, one is an `except` branch already marked
