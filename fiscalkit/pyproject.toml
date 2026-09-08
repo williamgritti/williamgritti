@@ -49,6 +49,20 @@ Changelog = "https://github.com/williamgritti/fiscalkit/blob/main/CHANGELOG.md"
 [tool.hatch.build.targets.wheel]
 packages = ["src/fiscalkit"]
 
+# List what belongs in the sdist explicitly. The default sweeps in whatever
+# happens to be in the working tree -- a local virtualenv, for one, whose
+# absolute symlinks make the tarball unbuildable.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/CONTRIBUTING.md",
+    "/pyproject.toml",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
