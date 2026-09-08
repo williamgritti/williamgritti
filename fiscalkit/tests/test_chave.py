@@ -28,6 +28,21 @@ def build_key(
     return body + str(access_key_check_digit(body))
 
 
+def random_body(rng: random.Random) -> str:
+    """A random 43-digit body whose AAMM month is in range.
+
+    Fully random digits give a valid month only ~12% of the time, and an
+    out-of-range month is rejected before the check digit is ever consulted, so
+    tests about check-digit behaviour must pin the month first.
+    """
+    digits = [rng.choice("0123456789") for _ in range(43)]
+    digits[2] = rng.choice("0123456789")
+    digits[3] = rng.choice("0123456789")
+    month = rng.randint(1, 12)
+    digits[4], digits[5] = f"{month:02d}"
+    return "".join(digits)
+
+
 def reference_check_digit(body: str) -> int:
     """A second, deliberately different implementation of the mod-11 rule.
 
@@ -115,6 +130,8 @@ def _undetected_substitutions(key: str) -> list[tuple[int, str, str]]:
     """Every single-digit substitution in *key* that still validates."""
     misses = []
     for position in range(43):
+        if position in (4, 5):
+            continue  # month positions are rejected by the month rule, not the DV
         original = key[position]
         for replacement in "0123456789":
             if replacement == original:
@@ -130,7 +147,7 @@ def test_single_digit_changes_detected_when_check_digit_is_nonzero() -> None:
     rng = random.Random(11)
     checked = 0
     while checked < 25:
-        body = "".join(rng.choice("0123456789") for _ in range(43))
+        body = random_body(rng)
         key = body + str(access_key_check_digit(body))
         if key[43] == "0":
             continue
@@ -147,7 +164,7 @@ def test_zero_check_digit_is_a_weaker_guard() -> None:
     """
     rng = random.Random(13)
     while True:
-        body = "".join(rng.choice("0123456789") for _ in range(43))
+        body = random_body(rng)
         key = body + str(access_key_check_digit(body))
         if key[43] == "0":
             break

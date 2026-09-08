@@ -66,6 +66,11 @@ def _strip(value: str) -> str:
     return _NON_DIGIT.sub("", value or "")
 
 
+def _month_is_valid(year_month: str) -> bool:
+    """Whether the ``AAMM`` slice carries a month in 1..12."""
+    return len(year_month) == 4 and year_month[2:].isdigit() and 1 <= int(year_month[2:]) <= 12
+
+
 def access_key_check_digit(first_43: str) -> int:
     """Compute the mod-11 check digit (``cDV``) for the first 43 digits of a key.
 
@@ -95,6 +100,8 @@ def is_valid_access_key(value: str) -> bool:
     """Return ``True`` when *value* is 44 digits with a matching check digit."""
     digits = _strip(value)
     if len(digits) != _KEY_LENGTH:
+        return False
+    if not _month_is_valid(digits[2:6]):
         return False
     try:
         return int(digits[43]) == access_key_check_digit(digits[:43])
@@ -136,6 +143,12 @@ class AccessKey:
                 f"Access key must have {_KEY_LENGTH} digits, got {len(digits)}",
                 value=digits,
                 reason="length",
+            )
+        if not _month_is_valid(digits[2:6]):
+            raise ValidationError(
+                f"Access key emission month must be 01-12, got {digits[4:6]}",
+                value=digits,
+                reason="year_month",
             )
         expected = access_key_check_digit(digits[:43])
         if int(digits[43]) != expected:
@@ -207,7 +220,19 @@ class AccessKey:
         The key stores only year and month, so the day is normalized to 1. Keys use
         a two-digit year; it is resolved into the 2000s, which covers the entire
         lifetime of the NF-e programme.
+
+        Raises:
+            ValidationError: If the key was built bypassing :meth:`parse` and its
+                month is out of range. Raising inside the library's own hierarchy
+                keeps a caller's ``except ValidationError`` sufficient, rather
+                than leaking a ``ValueError`` from :mod:`datetime`.
         """
+        if not _month_is_valid(self.year_month):
+            raise ValidationError(
+                f"Access key emission month must be 01-12, got {self.year_month[2:]}",
+                value=self.digits,
+                reason="year_month",
+            )
         return date(2000 + int(self.year_month[:2]), int(self.year_month[2:]), 1)
 
     @property

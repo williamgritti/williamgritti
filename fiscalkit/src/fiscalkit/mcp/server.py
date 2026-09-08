@@ -24,7 +24,7 @@ from typing import Any
 
 from ..codes.cfop import classify_cfop
 from ..codes.uf import UFS, by_acronym, by_code
-from ..documents.cnpj import CNPJ, check_digits_for
+from ..documents.cnpj import CNPJ, check_digits_for, strip_cnpj
 from ..documents.cpf import CPF
 from ..exceptions import FiscalKitError, ValidationError
 from ..nfe.chave import AccessKey
@@ -71,7 +71,9 @@ def calcular_dv_cnpj(base: str) -> dict[str, Any]:
         digits = check_digits_for(base)
     except ValidationError as exc:
         return {"ok": False, "motivo": exc.reason, "detalhe": str(exc)}
-    completo = "".join(c for c in base.upper() if c.isalnum()) + digits
+    # strip_cnpj, not str.isalnum(): isalnum() is True for non-ASCII letters such
+    # as "Ç", which would be carried into a value that is not a CNPJ at all.
+    completo = strip_cnpj(base) + digits
     return {"ok": True, "digitos_verificadores": digits, "cnpj_completo": completo}
 
 
@@ -87,8 +89,12 @@ def decodificar_chave(chave: str) -> dict[str, Any]:
         return {"valido": False, "motivo": exc.reason, "detalhe": str(exc)}
 
 
-def analisar_nfe(xml: str) -> dict[str, Any]:
-    """Parse NF-e XML and summarize issuer, recipient, items and totals."""
+def analisar_nfe(xml: str | bytes) -> dict[str, Any]:
+    """Parse NF-e XML and summarize issuer, recipient, items and totals.
+
+    Accepts bytes so a caller can hand over raw file content and let the XML
+    declaration pick the encoding; NF-e files are frequently ISO-8859-1.
+    """
     try:
         nfe = parse_nfe(xml)
     except FiscalKitError as exc:

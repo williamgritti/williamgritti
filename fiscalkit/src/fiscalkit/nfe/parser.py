@@ -54,19 +54,35 @@ def _text(node: ET.Element | None, *path: str) -> str:
     return found.text.strip()
 
 
+#: Widest exponent accepted for a monetary field. NF-e amounts carry at most 15
+#: significant digits, so anything beyond this is not a real value.
+_MAX_ADJUSTED_EXPONENT = 20
+
+
 def _decimal(node: ET.Element | None, *path: str) -> Decimal:
     """Return the value at *path* as a :class:`Decimal`, or zero when absent.
 
     Malformed numbers degrade to zero rather than raising: a single unreadable tax
     field should not make an otherwise valid document unparseable.
+
+    ``Decimal`` accepts ``"NaN"``, ``"sNaN"`` and ``"Infinity"`` without complaint,
+    and the resulting value only detonates later, during arithmetic — inside
+    ``totals_reconcile`` or a caller's own sum, far from the parse that admitted
+    it. Since NF-e XML arrives from third parties, those are rejected here, along
+    with values such as ``"1E999999999"`` whose magnitude no monetary field can
+    hold. Both would otherwise turn a hostile document into an uncaught
+    ``decimal.InvalidOperation`` escaping the library's error hierarchy.
     """
     raw = _text(node, *path)
     if not raw:
         return ZERO
     try:
-        return Decimal(raw)
+        value = Decimal(raw)
     except (InvalidOperation, ValueError):
         return ZERO
+    if not value.is_finite() or abs(value.adjusted()) > _MAX_ADJUSTED_EXPONENT:
+        return ZERO
+    return value
 
 
 def _sum_tax(imposto: ET.Element | None, group: str, tag: str) -> Decimal:

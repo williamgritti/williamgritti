@@ -30,6 +30,29 @@ First release.
 - **MCP server** (`fiscalkit-mcp`) exposing eight tools to AI agents, returning
   structured failure payloads rather than raising.
 
+### Hardened against hostile input
+
+Found by an adversarial audit before release, each pinned by a regression test:
+
+- `Decimal` accepts `"NaN"`, `"sNaN"` and `"Infinity"` without complaint, so such
+  a value from third-party XML parsed cleanly and only detonated later during
+  arithmetic, as an uncaught `decimal.InvalidOperation` escaping the library's
+  error hierarchy. Non-finite and absurd-magnitude amounts are now refused at
+  parse time and degrade to zero like any other unreadable field.
+- The `AAMM` slice of an access key was never range-checked, so a key with month
+  `00` or `13` passed `is_valid_access_key`, then raised a bare `ValueError` from
+  `datetime` out of `emitted_on` — crashing `to_dict()`, the `decodificar_chave`
+  MCP tool, and the CLI with a traceback. The month is now validated at parse
+  time, and `emitted_on` raises `ValidationError` if reached another way.
+- The CLI decoded NF-e files as UTF-8 with `errors="replace"`, corrupting the
+  ISO-8859-1 documents the library itself reads correctly. It now passes raw
+  bytes so the XML declaration decides the encoding.
+- `calcular_dv_cnpj` normalized with `str.isalnum()`, which is true for non-ASCII
+  letters such as `Ç`, and could return a 15-character value that was not a CNPJ.
+  It now uses `strip_cnpj`.
+- Five section comments had been swept into the top-level `__all__`, so
+  `from fiscalkit import *` raised `AttributeError`.
+
 ### Notes
 
 - Money is `Decimal` throughout; binary floats corrupt cent-level reconciliation.

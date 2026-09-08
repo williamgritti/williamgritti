@@ -2,7 +2,7 @@
 
 Examples::
 
-    fiscalkit chave 43240311222333000181550010000001231000000018
+    fiscalkit chave 43240311222333000181550010000001231000000010
     fiscalkit cnpj 11.222.333/0001-81
     fiscalkit cpf 111.444.777-35
     fiscalkit nfe nota.xml
@@ -99,7 +99,9 @@ def _cmd_nfe(args: argparse.Namespace) -> int:
     if not path.is_file():
         print(f"arquivo nao encontrado: {path}", file=sys.stderr)
         return 2
-    payload = analisar_nfe(path.read_bytes().decode("utf-8", errors="replace"))
+    # Hand over raw bytes: decoding as UTF-8 here would mangle the ISO-8859-1
+    # files the parser itself reads correctly from the XML declaration.
+    payload = analisar_nfe(path.read_bytes())
     if not payload.get("ok"):
         return _emit(payload, args.json, ["nao foi possivel ler a NF-e"])
     emit = payload["emitente"] or {}
