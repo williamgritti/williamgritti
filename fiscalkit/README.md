@@ -114,6 +114,10 @@ failing it on advisory findings:
 fiscalkit scan . --json | jq '.pronto_para_2026'
 ```
 
+Write reports outside the tree you are scanning. A `.json` report left inside it
+is scanned on the next pass — the rule explanations contain the very patterns the
+rules look for — and `--fix` will rewrite the report rather than your code.
+
 ### In CI, with findings annotated on the pull request
 
 `--format sarif` emits SARIF 2.1.0, which GitHub code scanning ingests — so

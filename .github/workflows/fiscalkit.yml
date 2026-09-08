@@ -249,15 +249,24 @@ jobs:
         run: |
           set -euo pipefail
           cd /tmp/fixcheck
-          before=$(fiscalkit scan . --json | python -c "import json,sys;print(json.load(sys.stdin)['total'])")
+          # `scan` exits non-zero by design when it finds breakage, and this step
+          # runs under `set -e -o pipefail`, so every invocation has to tolerate
+          # that or the step dies before producing any output. This is the same
+          # trap the action itself hit; redirect to a file rather than piping.
+          # Reports go outside the scanned tree. A .json written inside it is
+          # itself scanned on the next pass -- and --fix will happily rewrite the
+          # report, which is how this step first reported one finding too many.
+          fiscalkit scan . --json > /tmp/before.json || true
+          before=$(python -c "import json;print(json.load(open('/tmp/before.json'))['total'])")
           fiscalkit scan . --fix || true
-          after=$(fiscalkit scan . --json | python -c "import json,sys;print(json.load(sys.stdin)['total'])")
+          fiscalkit scan . --json > /tmp/after.json || true
+          after=$(python -c "import json;print(json.load(open('/tmp/after.json'))['total'])")
           echo "findings before=$before after=$after"
           [ "$after" -lt "$before" ]
           # Exactly the rules with no mechanical rewrite may remain.
-          fiscalkit scan . --json | python -c "
+          python -c "
           import json, sys
-          left = {o['regra'] for o in json.load(sys.stdin)['ocorrencias']}
+          left = {o['regra'] for o in json.load(open('/tmp/after.json'))['ocorrencias']}
           fixable = {'CNPJ001', 'CNPJ011', 'CNPJ012', 'CNPJ021'}
           assert not (left & fixable), f'--fix left a fixable rule behind: {left & fixable}'
           print('remaining, all needing human judgement:', sorted(left) or 'none')
