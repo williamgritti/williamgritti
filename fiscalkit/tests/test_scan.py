@@ -584,3 +584,36 @@ def test_ordinary_long_lines_are_still_scanned(tmp_path) -> None:
     result = scan_path(tmp_path)
     assert result.files_minified == 0
     assert result.breaks
+
+
+def test_numeric_column_claim_matches_observed_database_behaviour() -> None:
+    """The CNPJ011 explanation is executed here, not merely asserted.
+
+    A strict engine rejects an alphanumeric CNPJ. SQLite's default type affinity
+    instead stores it as TEXT in a column declared BIGINT, which is the more
+    dangerous outcome: the column ends up holding integers and text together and
+    nothing fails until a join or an ORDER BY touches it.
+    """
+    import sqlite3
+
+    legacy, alpha = "11222333000181", "12ABC34501DE35"
+
+    lax = sqlite3.connect(":memory:")
+    lax.execute("CREATE TABLE f (cnpj BIGINT NOT NULL)")
+    lax.execute("INSERT INTO f VALUES (?)", (legacy,))
+    lax.execute("INSERT INTO f VALUES (?)", (alpha,))
+    types = [row[0] for row in lax.execute("SELECT typeof(cnpj) FROM f ORDER BY rowid")]
+    assert types == ["integer", "text"], types  # mixed types in one column
+
+    strict = sqlite3.connect(":memory:")
+    strict.execute("CREATE TABLE f (cnpj INTEGER NOT NULL) STRICT")
+    strict.execute("INSERT INTO f VALUES (?)", (legacy,))
+    with pytest.raises(sqlite3.IntegrityError):
+        strict.execute("INSERT INTO f VALUES (?)", (alpha,))
+
+    # The rule text must describe both outcomes, since a reader on SQLite who is
+    # told only "cannot store" will conclude, wrongly, that they are unaffected.
+    rule = next(r for r in RULES if r.id == "CNPJ011")
+    lowered = rule.explanation.lower()
+    assert "reject" in lowered
+    assert "text" in lowered and "sqlite" in lowered

@@ -77,6 +77,19 @@ maintainers, and it is recorded here rather than quietly rewritten, because it
 is the same over-generalisation this project has now made four times: test a
 sample, state a universal.
 
+### The numeric-column rule now describes what databases actually do
+
+`CNPJ011` said an integer column "cannot store" an alphanumeric CNPJ. Running it
+shows that is true of PostgreSQL, MySQL and SQLite STRICT tables, and false of
+SQLite's default type affinity, which accepts the value and stores it as TEXT in
+a column declared `BIGINT`.
+
+That case is the more dangerous one. Legacy rows stay integers, new ones become
+text, and nothing fails until a join, an `ORDER BY` or a comparison touches the
+column. A reader on SQLite told only "cannot store" would reasonably conclude
+they are unaffected. The rule text now covers both outcomes and a test executes
+each against a real database rather than asserting them.
+
 ### Differential tests against independent implementations
 
 Every correctness test in this package was written by the same author as the

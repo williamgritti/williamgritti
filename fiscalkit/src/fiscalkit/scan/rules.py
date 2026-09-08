@@ -180,8 +180,12 @@ RULES: tuple[Rule, ...] = (
         ),
         languages=frozenset({"sql"}),
         explanation=(
-            "An integer column cannot store a CNPJ containing letters at all. This "
-            "is a schema migration, so it needs the longest lead time of anything here."
+            "PostgreSQL, MySQL and SQLite STRICT tables reject an alphanumeric CNPJ "
+            "outright. SQLite's default type affinity is worse: it accepts the value "
+            "and stores it as TEXT in a column declared BIGINT, leaving legacy rows "
+            "as integers and new ones as text in the same column, so the failure "
+            "surfaces later on a join, an ORDER BY or a comparison. Either way this "
+            "is a schema migration, which needs the longest lead time of anything here."
         ),
         fix="Migrate to CHAR(14) or VARCHAR(14). Plan for a backfill and for every "
         "foreign key that references this column.",
