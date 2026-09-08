@@ -221,6 +221,59 @@ jobs:
           [ "${{ steps.clean.outputs.breaking }}" = "0" ]
           [ "${{ steps.clean.outputs.ready }}"    = "true" ]
 
+      # --fix writes to a user's source files, which is the riskiest thing this
+      # package does and was covered only by unit tests. Exercised here against a
+      # real checkout, including that the diff is genuinely git-appliable.
+      - name: Install fiscalkit for the fix checks
+        shell: bash
+        run: pip install ./fiscalkit
+
+      - name: The diff must be something git apply accepts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/fixcheck && mkdir -p /tmp/fixcheck
+          cp -r fiscalkit/tests/fixtures/legacy_project/* /tmp/fixcheck/
+          cd /tmp/fixcheck
+          git init -q . && git config user.email ci@ci && git config user.name ci
+          git add -A && git commit -qm base
+          fiscalkit scan . --diff > /tmp/fk.patch || true
+          test -s /tmp/fk.patch
+          git apply --check /tmp/fk.patch
+          git apply /tmp/fk.patch
+          echo "git apply accepted and applied the generated diff"
+          git checkout -q .
+
+      - name: --fix resolves the mechanical findings and leaves the rest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/fixcheck
+          before=$(fiscalkit scan . --json | python -c "import json,sys;print(json.load(sys.stdin)['total'])")
+          fiscalkit scan . --fix || true
+          after=$(fiscalkit scan . --json | python -c "import json,sys;print(json.load(sys.stdin)['total'])")
+          echo "findings before=$before after=$after"
+          [ "$after" -lt "$before" ]
+          # Exactly the rules with no mechanical rewrite may remain.
+          fiscalkit scan . --json | python -c "
+          import json, sys
+          left = {o['regra'] for o in json.load(sys.stdin)['ocorrencias']}
+          fixable = {'CNPJ001', 'CNPJ011', 'CNPJ012', 'CNPJ021'}
+          assert not (left & fixable), f'--fix left a fixable rule behind: {left & fixable}'
+          print('remaining, all needing human judgement:', sorted(left) or 'none')
+          "
+
+      - name: Applying twice must change nothing
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/fixcheck
+          git add -A && git commit -qm fixed
+          fiscalkit scan . --fix || true
+          git diff --exit-code
+          echo "second --fix was a no-op"
+
+
   package:
     name: build and install
     runs-on: ubuntu-latest
