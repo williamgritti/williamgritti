@@ -316,3 +316,84 @@ def test_sarif_on_a_clean_project_has_no_results(tmp_path) -> None:
     doc = to_sarif(scan_path(tmp_path))
     assert doc["runs"][0]["results"] == []
     assert len(doc["runs"][0]["tool"]["driver"]["rules"]) == len(RULES)
+
+
+# ---------------------------------------------------------------------------
+# Behaviour derived from testing against real Brazilian CNPJ libraries
+# ---------------------------------------------------------------------------
+
+
+def test_correct_2026_isdigit_pattern_is_not_flagged() -> None:
+    """`cnpj[12:].isdigit()` is right; `cnpj.isdigit()` is wrong.
+
+    Under IN RFB 2.229/2024 the two check digits stay numeric while the first
+    twelve positions may hold letters, so asserting the *slice* is numeric is
+    exactly correct. `brutils` does precisely this, and flagging it would make
+    the scanner cry wolf on the reference implementation.
+    """
+    assert "CNPJ003" not in _ids("if not cnpj[12:].isdigit():\n    return False")
+    assert "CNPJ003" not in _ids("valid = cnpj[12:14].isdigit()")
+    # The unsliced form is the actual defect and must still be caught.
+    assert "CNPJ003" in _ids("if not cnpj.isdigit():\n    return False")
+
+
+def test_no_false_positives_on_a_correct_implementation() -> None:
+    """A faithful 2026-ready validator must scan completely clean."""
+    reference = """
+def is_valid(cnpj: str) -> bool:
+    if len(cnpj) != 14:
+        return False
+    if not cnpj[12:].isdigit():
+        return False
+    return _check_digits(cnpj) == cnpj[12:]
+
+
+def _value(char: str) -> int:
+    return ord(char) - 48
+
+
+def remove_symbols(dirty: str) -> str:
+    return "".join(c for c in dirty.upper() if c.isalnum())
+"""
+    assert scan_text(reference, language="python") == []
+
+
+def test_directory_named_in_skip_dirs_is_still_scanned_when_given_explicitly(
+    tmp_path,
+) -> None:
+    """Pruning must apply below the root, never to the root's own path.
+
+    Pointing the scanner at something inside `site-packages` or `build` used to
+    skip every file and report the project ready -- a false all-clear, the worst
+    answer a compliance tool can give.
+    """
+    target = tmp_path / "site-packages" / "mylib"
+    target.mkdir(parents=True)
+    (target / "m.py").write_text('cnpj = int(row["cnpj"])\n', encoding="utf-8")
+
+    explicit = scan_path(target)
+    assert explicit.files_scanned == 1
+    assert explicit.breaks
+
+    # From above it, the same directory is correctly treated as a dependency.
+    from_parent = scan_path(tmp_path)
+    assert from_parent.files_scanned == 0
+
+
+def test_empty_scan_is_not_reported_as_ready(tmp_path) -> None:
+    """ "I could not look" must never render as "you are ready"."""
+    (tmp_path / "notes.md").write_text("no source here\n", encoding="utf-8")
+    result = scan_path(tmp_path)
+    assert result.files_scanned == 0
+    assert result.scanned_nothing is True
+    assert result.is_clean is False
+    assert result.to_dict()["pronto_para_2026"] is False
+    assert result.to_dict()["nada_analisado"] is True
+
+
+def test_scanned_files_with_no_findings_are_clean(tmp_path) -> None:
+    (tmp_path / "ok.py").write_text("from fiscalkit import is_valid_cnpj\n", encoding="utf-8")
+    result = scan_path(tmp_path)
+    assert result.files_scanned == 1
+    assert result.scanned_nothing is False
+    assert result.is_clean is True

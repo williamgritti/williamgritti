@@ -155,10 +155,18 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         f"{counts.get('breaks', 0)} quebra, {counts.get('risky', 0)} risco, "
         f"{counts.get('review', 0)} rever"
     )
-    if result.is_clean:
+    if result.scanned_nothing:
+        print(
+            "nenhum arquivo analisado -- verifique o caminho ou a extensao dos arquivos",
+            file=sys.stderr,
+        )
+    elif result.is_clean:
         print("nenhum padrao incompativel com o CNPJ alfanumerico encontrado")
     # Non-zero only for certain breakage, so this can gate a build without
-    # failing it on advisory findings.
+    # failing it on advisory findings. An empty scan is also non-zero: silence
+    # from a tool that looked at nothing must not read as a pass.
+    if result.scanned_nothing:
+        return 2
     return 1 if result.breaks else 0
 
 

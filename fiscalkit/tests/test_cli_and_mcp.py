@@ -241,3 +241,10 @@ def test_cli_scan_sarif_always_exits_zero(tmp_path, capsys) -> None:
     doc = json.loads(capsys.readouterr().out)
     assert doc["version"] == "2.1.0"
     assert doc["runs"][0]["results"]
+
+
+def test_cli_scan_empty_returns_2(tmp_path, capsys) -> None:
+    """An empty scan must not exit 0; silence from looking at nothing is not a pass."""
+    (tmp_path / "readme.md").write_text("nothing here\n", encoding="utf-8")
+    assert main(["scan", str(tmp_path)]) == 2
+    assert "nenhum arquivo analisado" in capsys.readouterr().err

@@ -102,8 +102,18 @@ class ScanResult:
 
     @property
     def is_clean(self) -> bool:
-        """Whether nothing at all was found."""
-        return not self.findings
+        """Whether files were scanned and nothing was found.
+
+        A scan that examined no files is not clean, it is uninformative. Saying
+        otherwise turns "I could not look" into "you are ready", which is the
+        one answer a compliance tool must never give by accident.
+        """
+        return self.files_scanned > 0 and not self.findings
+
+    @property
+    def scanned_nothing(self) -> bool:
+        """Whether no file was examined at all, so the result means nothing."""
+        return self.files_scanned == 0
 
     def sorted_findings(self) -> list[Finding]:
         """Findings ordered by severity, then by location."""
@@ -127,6 +137,7 @@ class ScanResult:
             "total": len(self.findings),
             "por_severidade": self.counts(),
             "pronto_para_2026": self.is_clean,
+            "nada_analisado": self.scanned_nothing,
             "ocorrencias": [f.to_dict() for f in self.sorted_findings()],
         }
 
@@ -180,14 +191,26 @@ def scan_text(text: str, *, path: str = "<string>", language: str | None = None)
 
 
 def _walk(root: Path) -> Iterator[Path]:
-    """Yield scannable files under *root*, pruning dependency directories."""
+    """Yield scannable files under *root*, pruning dependency directories.
+
+    Pruning is applied only to path components *below* *root*, never to the
+    components of *root* itself. Otherwise pointing the scanner at a directory
+    that happens to sit inside ``site-packages`` or ``build`` skips every file
+    and reports a clean project -- a false all-clear, which is the worst answer
+    a compliance scanner can give. If the caller named the directory explicitly,
+    they meant it.
+    """
     if root.is_file():
         yield root
         return
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
-        if any(part in SKIP_DIRS for part in path.parts):
+        try:
+            relative = path.relative_to(root)
+        except ValueError:  # pragma: no cover - rglob results are under root
+            relative = path
+        if any(part in SKIP_DIRS for part in relative.parts):
             continue
         yield path
 

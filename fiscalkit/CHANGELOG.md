@@ -48,6 +48,28 @@ First release.
 - **MCP server** (`fiscalkit-mcp`) exposing eight tools to AI agents, returning
   structured failure payloads rather than raising.
 
+### Validated against real Brazilian CNPJ code
+
+Running the scanner against `brutils` 2.5.0 and `validate-docbr` 2.0.0 -- 41
+files of production Brazilian fiscal code that is already 2026-ready -- produced
+**zero false positives**, and surfaced one serious defect:
+
+- `site-packages` and other pruned directory names were matched against every
+  component of the absolute path, including the root the caller named. Pointing
+  the scanner at a directory inside one of them skipped every file and reported
+  the project ready. A false all-clear is the worst answer a compliance tool can
+  give, so pruning now applies only below the given root.
+- A scan that examined no files no longer counts as clean. `is_clean` requires
+  at least one file scanned, `scanned_nothing` reports the case, and the CLI
+  exits 2 rather than 0, because silence from a tool that looked at nothing must
+  not read as a pass.
+
+The precision the scanner claims is now demonstrated rather than asserted:
+`brutils` writes `cnpj[12:].isdigit()`, which is exactly right under the new
+rules since only the two check digits stay numeric, and the scanner leaves it
+alone while still catching the unsliced `cnpj.isdigit()`. Both are pinned by
+tests.
+
 ### Hardened against hostile input
 
 Found by an adversarial audit before release, each pinned by a regression test:
