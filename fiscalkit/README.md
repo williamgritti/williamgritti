@@ -85,6 +85,36 @@ failing it on advisory findings:
 fiscalkit scan . --json | jq '.pronto_para_2026'
 ```
 
+### In CI, with findings annotated on the pull request
+
+`--format sarif` emits SARIF 2.1.0, which GitHub code scanning ingests — so
+findings land on the exact line of the diff and in the Security tab, instead of
+buried in a log:
+
+```yaml
+- uses: williamgritti/fiscalkit@main
+  id: cnpj
+- uses: github/codeql-action/upload-sarif@v3
+  if: always()
+  with:
+    sarif_file: fiscalkit.sarif
+```
+
+The action writes a job summary, exposes `total`, `breaking` and `ready` as
+outputs, and fails the job only on certain breakage (`fail-on-break: false` to
+report without failing). SARIF generation always exits 0 so the upload succeeds
+even on a failing scan.
+
+### As a pre-commit hook
+
+```yaml
+repos:
+  - repo: https://github.com/williamgritti/fiscalkit
+    rev: v0.1.0
+    hooks:
+      - id: cnpj-2026
+```
+
 Twelve rules across Python, JavaScript/TypeScript, SQL, Java, PHP, Go, C# and
 Ruby. Dependency directories are pruned and commented-out code is ignored,
 because a scanner that cries wolf gets muted after one run.

@@ -61,6 +61,8 @@ include = [
     "/CHANGELOG.md",
     "/CONTRIBUTING.md",
     "/pyproject.toml",
+    "/action.yml",
+    "/.pre-commit-hooks.yaml",
 ]
 
 [tool.pytest.ini_options]

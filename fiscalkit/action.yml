@@ -1,0 +1,96 @@
+name: "CNPJ 2026 readiness"
+description: >-
+  Find code that breaks when Brazilian CNPJs become alphanumeric in July 2026
+  (IN RFB 2.229/2024): numeric-only regexes, integer casts, BIGINT columns.
+author: "William Gritti"
+
+branding:
+  icon: "search"
+  color: "red"
+
+inputs:
+  path:
+    description: "File or directory to scan."
+    required: false
+    default: "."
+  fail-on-break:
+    description: >-
+      Fail the job when a certain-breakage finding is present. Advisory findings
+      never fail the job.
+    required: false
+    default: "true"
+  sarif-file:
+    description: >-
+      Where to write the SARIF report. Upload it with
+      github/codeql-action/upload-sarif to get inline annotations and Security
+      tab entries.
+    required: false
+    default: "fiscalkit.sarif"
+  version:
+    description: "Version specifier for the fiscalkit package."
+    required: false
+    default: "fiscalkit"
+
+outputs:
+  total:
+    description: "Total findings."
+    value: ${{ steps.scan.outputs.total }}
+  breaking:
+    description: "Findings certain to break."
+    value: ${{ steps.scan.outputs.breaking }}
+  ready:
+    description: "true when nothing was found."
+    value: ${{ steps.scan.outputs.ready }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install fiscalkit
+      shell: bash
+      run: python -m pip install --quiet "${{ inputs.version }}"
+
+    - name: Scan
+      id: scan
+      shell: bash
+      run: |
+        set -uo pipefail
+
+        # GitHub runs composite bash steps with -e, and `scan` exits non-zero by
+        # design when it finds breakage. Without `|| true` the step would abort
+        # here for precisely the users who have something to fix, before any
+        # output or summary is produced.
+        # SARIF is written first so the upload step has a file even then.
+        fiscalkit scan "${{ inputs.path }}" --format sarif > "${{ inputs.sarif-file }}" || true
+        fiscalkit scan "${{ inputs.path }}" --json > fiscalkit-report.json || true
+
+        total=$(python -c "import json;print(json.load(open('fiscalkit-report.json'))['total'])")
+        breaking=$(python -c "import json;print(json.load(open('fiscalkit-report.json'))['por_severidade'].get('breaks',0))")
+        ready=$(python -c "import json;print(str(json.load(open('fiscalkit-report.json'))['pronto_para_2026']).lower())")
+
+        echo "total=$total"       >> "$GITHUB_OUTPUT"
+        echo "breaking=$breaking" >> "$GITHUB_OUTPUT"
+        echo "ready=$ready"       >> "$GITHUB_OUTPUT"
+
+        {
+          echo "## CNPJ 2026 readiness"
+          echo
+          if [ "$ready" = "true" ]; then
+            echo "No code incompatible with the alphanumeric CNPJ was found."
+          else
+            echo "**$breaking** finding(s) certain to break, **$total** in total."
+            echo
+            echo '```'
+            fiscalkit scan "${{ inputs.path }}" || true
+            echo '```'
+          fi
+          echo
+          echo "_From July 2026, IN RFB 2.229/2024 allows letters in the first twelve"
+          echo "positions of a CNPJ. Upgrading a validation library does not fix a"
+          echo "numeric column or a \`^\\d{14}\$\` regex._"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "${{ inputs.fail-on-break }}" = "true" ] && [ "$breaking" != "0" ]; then
+          echo "::error::$breaking CNPJ finding(s) will break in July 2026"
+          exit 1
+        fi
+        exit 0

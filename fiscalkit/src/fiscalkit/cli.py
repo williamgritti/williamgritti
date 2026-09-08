@@ -30,6 +30,7 @@ from .mcp.server import (
     validar_cnpj,
     validar_cpf,
 )
+from .scan.sarif import to_sarif
 from .scan.scanner import scan_path
 
 __all__ = ["main"]
@@ -130,7 +131,13 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         print(f"caminho nao encontrado: {target}", file=sys.stderr)
         return 2
     result = scan_path(target)
-    if args.json:
+    fmt = getattr(args, "format", "text")
+    if fmt == "sarif":
+        # SARIF is consumed by GitHub code scanning, which needs the upload to
+        # succeed even when the scan found problems, so this always exits 0.
+        print(json.dumps(to_sarif(result), ensure_ascii=False, indent=2))
+        return 0
+    if args.json or fmt == "json":
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
         return 1 if result.breaks else 0
 
@@ -187,6 +194,14 @@ def build_parser() -> argparse.ArgumentParser:
         "caminho",
         "arquivo ou diretorio",
         _cmd_scan,
+    )
+    # Only `scan` produces SARIF, so the flag lives on that subparser alone.
+    scan_parser = sub.choices["scan"]
+    scan_parser.add_argument(
+        "--format",
+        choices=["text", "json", "sarif"],
+        default="text",
+        help="formato de saida (sarif alimenta o GitHub code scanning)",
     )
     return parser
 

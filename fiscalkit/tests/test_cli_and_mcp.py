@@ -232,3 +232,12 @@ def test_cli_scan_json(tmp_path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["pronto_para_2026"] is False
     assert payload["ocorrencias"][0]["regra"] == "CNPJ011"
+
+
+def test_cli_scan_sarif_always_exits_zero(tmp_path, capsys) -> None:
+    """A SARIF upload must succeed even when the scan found problems."""
+    (tmp_path / "bad.py").write_text('cnpj = int(row["cnpj"])\n', encoding="utf-8")
+    assert main(["scan", str(tmp_path), "--format", "sarif"]) == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["version"] == "2.1.0"
+    assert doc["runs"][0]["results"]

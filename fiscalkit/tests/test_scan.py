@@ -244,3 +244,75 @@ def test_scanning_fiscalkit_itself_finds_no_breakage() -> None:
         f for f in scan_path(root).findings if f.severity == BREAKS and "rules.py" not in f.path
     ]
     assert offenders == [], f"fiscalkit itself would break: {offenders}"
+
+
+# ---------------------------------------------------------------------------
+# SARIF -- what GitHub code scanning ingests
+# ---------------------------------------------------------------------------
+
+
+def test_sarif_document_is_well_formed(tmp_path) -> None:
+    import json
+
+    from fiscalkit.scan.sarif import SARIF_VERSION, to_sarif
+
+    (tmp_path / "a.py").write_text(
+        'import re\ncnpj = row["cnpj"]\nif not re.match(r"^\\d{14}$", cnpj):\n    fail()\n',
+        encoding="utf-8",
+    )
+    doc = to_sarif(scan_path(tmp_path))
+    json.dumps(doc)  # must survive the transport
+
+    assert doc["version"] == SARIF_VERSION
+    assert doc["$schema"].endswith("sarif-schema-2.1.0.json")
+    run = doc["runs"][0]
+
+    driver = run["tool"]["driver"]
+    assert driver["name"] == "fiscalkit"
+    # Every rule is declared, not only the matched ones, so the Security tab can
+    # describe a rule even on a scan that reports none of it.
+    assert len(driver["rules"]) == len(RULES)
+
+    assert run["results"], "expected at least one result"
+    declared = {r["id"] for r in driver["rules"]}
+    for result in run["results"]:
+        assert result["ruleId"] in declared
+        assert result["level"] in {"error", "warning", "note"}
+        assert result["message"]["text"]
+        region = result["locations"][0]["physicalLocation"]["region"]
+        assert region["startLine"] >= 1
+
+
+def test_sarif_severity_maps_to_github_levels(tmp_path) -> None:
+    from fiscalkit.scan.sarif import to_sarif
+
+    (tmp_path / "m.py").write_text(
+        'cnpj = row["cnpj"]\ncnpj = int(cnpj)\ncnpj = cnpj.zfill(14)\n', encoding="utf-8"
+    )
+    levels = {r["ruleId"]: r["level"] for r in to_sarif(scan_path(tmp_path))["runs"][0]["results"]}
+    assert levels.get("CNPJ010") == "error"  # breaks
+    assert levels.get("CNPJ013") == "warning"  # risky
+
+
+def test_sarif_uses_relative_forward_slashed_paths(tmp_path) -> None:
+    """SARIF requires a relative URI; an absolute Windows path is rejected."""
+    from fiscalkit.scan.sarif import to_sarif
+
+    nested = tmp_path / "app" / "db"
+    nested.mkdir(parents=True)
+    (nested / "m.py").write_text('cnpj = int(row["cnpj"])\n', encoding="utf-8")
+    uri = to_sarif(scan_path(tmp_path))["runs"][0]["results"][0]["locations"][0][
+        "physicalLocation"
+    ]["artifactLocation"]["uri"]
+    assert "\\" not in uri
+    assert not uri.startswith("/")
+    assert uri == "app/db/m.py"
+
+
+def test_sarif_on_a_clean_project_has_no_results(tmp_path) -> None:
+    from fiscalkit.scan.sarif import to_sarif
+
+    (tmp_path / "ok.py").write_text("from fiscalkit import is_valid_cnpj\n", encoding="utf-8")
+    doc = to_sarif(scan_path(tmp_path))
+    assert doc["runs"][0]["results"] == []
+    assert len(doc["runs"][0]["tool"]["driver"]["rules"]) == len(RULES)

@@ -1,0 +1,11 @@
+- id: cnpj-2026
+  name: CNPJ 2026 readiness
+  description: >-
+    Find code that breaks when Brazilian CNPJs become alphanumeric in July 2026:
+    numeric-only regexes, integer casts, BIGINT columns.
+  entry: fiscalkit scan
+  language: python
+  # Pass the repository root once rather than a file list, so directory-level
+  # rules and the summary line behave the same as a manual run.
+  pass_filenames: false
+  args: ["."]

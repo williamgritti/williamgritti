@@ -20,6 +20,13 @@ First release.
   test suite to accept a legacy CNPJ and reject or corrupt an alphanumeric one.
   Exits non-zero only on certain breakage so it can gate a build, and is exposed
   to agents as the `escanear_codigo` and `escanear_projeto` MCP tools.
+- **SARIF 2.1.0 output** (`--format sarif`) for GitHub code scanning, so findings
+  are annotated on the pull request line and listed in the Security tab rather
+  than buried in a log. Generation always exits 0, because an upload step needs
+  its file even when the scan itself fails the job.
+- **A composite GitHub Action** (`action.yml`) and a **pre-commit hook**
+  (`.pre-commit-hooks.yaml`), so the check runs on every pull request in three
+  lines of configuration.
 
 - **CPF** validation, formatting and repeated-digit rejection.
 - **CNPJ** validation supporting both the legacy numeric format and the
