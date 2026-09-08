@@ -6,6 +6,17 @@ name. None of that is something an agent can or should do for you.
 
 **Total time to first public release: about 30 minutes.**
 
+**Where this code is.** All of it — the package, this runbook, `LAUNCH.md` — is
+on the branch `claude/monetization-strategy-6ibrmr`, in pull request #3. `main`
+holds only your profile README. The PR was a draft, which cannot be merged, so it
+is now marked ready for review: the work is finished and all ten checks are
+green, and leaving it a draft was the one thing standing between you and being
+able to merge it at all.
+
+You do not have to merge it to do any of what follows — the steps below work from
+the branch — but merging first is tidier, because step 1 copies this directory
+into its own repository and you want that copy taken from something permanent.
+
 Nothing in this repository contains a payment address, and nothing should. Use
 public *handles* (Ko-fi, PayPal.Me), never an email address, anywhere public.
 
