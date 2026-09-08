@@ -56,22 +56,26 @@ validator, none of which a dependency upgrade touches:
 
 ```console
 $ fiscalkit scan .
-QUEBRA app/fornecedor.py:3  [CNPJ001] Numeric-only CNPJ regex
+QUEBRA app/fornecedor.py:4  [CNPJ001] Regex de CNPJ que aceita apenas dígitos
        CNPJ_RE = re.compile(r"^\d{14}$")
-       correcao: Match [0-9A-Z]{12}[0-9]{2} instead: the first twelve positions
-                 accept letters, the two check digits stay numeric.
+       correção: Use [0-9A-Z]{12}[0-9]{2}: as doze primeiras posições aceitam letras e os
+                 dois dígitos verificadores continuam numéricos.
 
-QUEBRA app/fornecedor.py:8  [CNPJ012] CNPJ mapped to an integer field in an ORM
+QUEBRA app/fornecedor.py:8  [CNPJ012] CNPJ mapeado como campo inteiro no ORM
        cnpj = models.BigIntegerField(unique=True)
-       correcao: Use a character field of length 14.
+       correção: Use um campo de caractere com tamanho 14.
 
-QUEBRA schema.sql:3  [CNPJ011] CNPJ column declared as a numeric type
-       cnpj BIGINT NOT NULL UNIQUE,
-       correcao: Migrate to CHAR(14) or VARCHAR(14). Plan for a backfill and for
-                 every foreign key that references this column.
+QUEBRA schema.sql:3  [CNPJ011] Coluna de CNPJ declarada com tipo numérico
+       cnpj BIGINT NOT NULL UNIQUE
+       correção: Migre para CHAR(14) ou VARCHAR(14). Planeje o backfill e todas as chaves
+                 estrangeiras que referenciam esta coluna.
 
-2 arquivo(s) analisado(s), 6 ocorrencia(s): 6 quebra, 0 risco, 0 rever
+2 arquivo(s) analisado(s), 3 ocorrência(s): 3 quebra, 0 risco, 0 rever
 ```
+
+The report is written in Portuguese, because the people who have to act on it
+are. The JSON and SARIF keys stay ASCII, so the machine-readable contract is
+unaffected.
 
 Each pattern is verified in the test suite to accept `11222333000181` and reject
 or corrupt `12ABC34501DE35`. A rule that cannot demonstrate that difference is not
@@ -219,15 +223,15 @@ A mismatch means the file is malformed or was edited after signing.
 $ fiscalkit chave 43240311222333000181550010000001231000000010
 chave      4324 0311 2223 3300 0181 5500 1000 0001 2310 0000 0010
 uf         RS (Rio Grande do Sul)
-emissao    2403  (2024-03-01)
+emissão    2403  (2024-03-01)
 cnpj       11222333000181
 modelo     55 - NF-e (Nota Fiscal Eletrônica)
-serie      001
-numero     000000123
-emissao    Normal
+série      001
+número     000000123
+emissão    Normal
 
 $ fiscalkit cnpj 12ABC34501DE35
-12.ABC.345/01DE-35  valido  (alfanumerico, filial 01DE)
+12.ABC.345/01DE-35  válido  (alfanumérico, filial 01DE)
 ```
 
 Every command takes `--json` and exits non-zero on invalid input, so it drops

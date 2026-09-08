@@ -116,21 +116,23 @@ RULES: tuple[Rule, ...] = (
     # -- Numeric-only validation ------------------------------------------
     Rule(
         id="CNPJ001",
-        title="Numeric-only CNPJ regex",
+        title="Regex de CNPJ que aceita apenas dígitos",
         severity=BREAKS,
         pattern=_c(r"(?:\\d|\[0-9\])\s*\{\s*14\s*\}"),
         needs_cnpj_context=True,
         explanation=(
-            "A 14-digit numeric regex rejects every alphanumeric CNPJ. This is the "
-            "single most common way a system will start refusing valid documents."
+            "Uma regex numérica de 14 dígitos rejeita todo CNPJ alfanumérico. É a forma mais comum "
+            "de um sistema passar a recusar documentos válidos."
         ),
-        fix="Match [0-9A-Z]{12}[0-9]{2} instead: the first twelve positions accept "
-        "letters, the two check digits stay numeric.",
+        fix=(
+            "Use [0-9A-Z]{12}[0-9]{2}: as doze primeiras posições aceitam letras e os dois dígitos "
+            "verificadores continuam numéricos."
+        ),
         autofix=((r"\d{14}", "[0-9A-Z]{12}[0-9]{2}"), ("[0-9]{14}", "[0-9A-Z]{12}[0-9]{2}")),
     ),
     Rule(
         id="CNPJ002",
-        title="Formatted CNPJ mask accepting only digits",
+        title="Máscara de CNPJ formatada que aceita apenas dígitos",
         severity=BREAKS,
         # Anchored on the "/0000" branch group, which is unique to the CNPJ mask.
         # An earlier version matched only the leading \d{2}\.\d{3}, and that
@@ -140,45 +142,46 @@ RULES: tuple[Rule, ...] = (
         pattern=_c(r"(?:\\d|\[0-9\])\s*\{\s*3\s*\}\s*\\?/\s*(?:\\d|\[0-9\])\s*\{\s*4\s*\}"),
         needs_cnpj_context=True,
         explanation=(
-            "A 00.000.000/0000-00 mask built from digit classes rejects the "
-            "alphanumeric form, which is punctuated identically."
+            "Uma máscara 00.000.000/0000-00 montada com classes de dígito rejeita a forma "
+            "alfanumérica, que tem exatamente a mesma pontuação."
         ),
-        fix="Widen the first twelve positions to [0-9A-Z] and keep the final two numeric.",
+        fix="Amplie as doze primeiras posições para [0-9A-Z] e mantenha as duas últimas numéricas.",
     ),
     Rule(
         id="CNPJ003",
-        title="isdigit / isnumeric check on a CNPJ",
+        title="Verificação isdigit / isnumeric em CNPJ",
         severity=BREAKS,
         pattern=_c(r"cnpj\w*\s*(?:\.|->|::)\s*(?:isdigit|isnumeric|isdecimal)\s*\(\)"),
         explanation=(
-            "isdigit() is False for any CNPJ containing a letter, so this guard "
-            "rejects valid documents from July 2026."
+            "isdigit() é falso para qualquer CNPJ com letra, então essa guarda passa a rejeitar "
+            "documentos válidos a partir de julho de 2026."
         ),
-        fix="Validate with a CNPJ validator that knows the 2026 rules, or test "
-        "isalnum() plus an explicit check that the last two characters are digits.",
+        fix=(
+            "Valide com um validador de CNPJ que conheça as regras de 2026, ou teste isalnum() "
+            "somado a uma verificação explícita de que os dois últimos caracteres são dígitos."
+        ),
     ),
     Rule(
         id="CNPJ004",
-        title="ctype / Number check on a CNPJ",
+        title="Verificação ctype / Number em CNPJ",
         severity=BREAKS,
         pattern=_c(
             r"(?<![\w.])(?:ctype_digit|is_numeric|isNaN|Number|parseInt|parseFloat)"
             r"\s*\(\s*[^)]*cnpj"
         ),
         explanation=(
-            "Numeric coercion of a CNPJ fails once letters are legal, and the two "
-            "ways it fails are not equally survivable. Number() and isNaN() give "
-            "NaN, and ctype_digit() gives false, which are loud. parseInt() "
-            "truncates at the first letter and returns a plausible number: "
-            "parseInt('12ABC34501DE35', 10) is 12. That reaches a database as a "
-            "valid-looking value and is discovered much later, if at all."
+            "Converter um CNPJ para número quebra quando letras passam a ser válidas, e as duas "
+            "formas de quebrar não são igualmente sobreviveis. Number() e isNaN() produzem NaN, e "
+            "ctype_digit() devolve false: são falhas barulhentas. Já parseInt() trunca na primeira "
+            "letra e devolve um número plausível, pois parseInt('12ABC34501DE35', 10) é 12. Esse "
+            "valor chega ao banco parecendo legítimo e só é descoberto muito depois, se for."
         ),
-        fix="Treat the CNPJ as an opaque string. It is an identifier, never a quantity.",
+        fix="Trate o CNPJ como string opaca. Ele é um identificador, nunca uma quantidade.",
     ),
     # -- Numeric storage and casting --------------------------------------
     Rule(
         id="CNPJ010",
-        title="CNPJ cast to an integer",
+        title="CNPJ convertido para inteiro",
         severity=BREAKS,
         # The lookbehind excludes a preceding word character so that "print("
         # does not match on the "int(" inside it. It deliberately allows a
@@ -192,29 +195,31 @@ RULES: tuple[Rule, ...] = (
             r"|cnpj[^\n]{0,24}\.\s*to_i\b)"
         ),
         explanation=(
-            "Casting to an integer throws or truncates on an alphanumeric CNPJ, and "
-            "silently discards leading zeros even today."
+            "Converter para inteiro estoura ou trunca em um CNPJ alfanumérico, e já hoje descarta "
+            "silenciosamente os zeros à esquerda."
         ),
-        fix="Keep the CNPJ as a string end to end.",
+        fix="Mantenha o CNPJ como string de ponta a ponta.",
     ),
     Rule(
         id="CNPJ011",
-        title="CNPJ column declared as a numeric type",
+        title="Coluna de CNPJ declarada com tipo numérico",
         severity=BREAKS,
         pattern=_c(
             r"cnpj\w*\s+(?:big\s*int|bigint|int(?:eger)?|numeric|decimal|number|bigserial|long)\b"
         ),
         languages=frozenset({"sql"}),
         explanation=(
-            "PostgreSQL, MySQL and SQLite STRICT tables reject an alphanumeric CNPJ "
-            "outright. SQLite's default type affinity is worse: it accepts the value "
-            "and stores it as TEXT in a column declared BIGINT, leaving legacy rows "
-            "as integers and new ones as text in the same column, so the failure "
-            "surfaces later on a join, an ORDER BY or a comparison. Either way this "
-            "is a schema migration, which needs the longest lead time of anything here."
+            "PostgreSQL, MySQL e tabelas STRICT do SQLite rejeitam um CNPJ alfanumérico de "
+            "imediato. O comportamento padrão do SQLite é pior: ele aceita o valor e o grava como "
+            "TEXT numa coluna declarada BIGINT, deixando as linhas antigas como inteiro e as novas "
+            "como texto na mesma coluna, de modo que a falha só aparece depois, num JOIN, num "
+            "ORDER BY ou numa comparação. De um jeito ou de outro isso é migração de schema, o "
+            "item que exige o maior prazo de todos aqui."
         ),
-        fix="Migrate to CHAR(14) or VARCHAR(14). Plan for a backfill and for every "
-        "foreign key that references this column.",
+        fix=(
+            "Migre para CHAR(14) ou VARCHAR(14). Planeje o backfill e todas as chaves estrangeiras "
+            "que referenciam esta coluna."
+        ),
         autofix=(
             ("BIGINT", "CHAR(14)"),
             ("bigint", "CHAR(14)"),
@@ -224,7 +229,7 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         id="CNPJ012",
-        title="CNPJ mapped to an integer field in an ORM",
+        title="CNPJ mapeado como campo inteiro no ORM",
         severity=BREAKS,
         # Two shapes: `cnpj = IntegerField()` (Python/ORM, name first) and
         # `private BigInteger cnpj;` or `public long Cnpj { get; set; }`
@@ -235,8 +240,8 @@ RULES: tuple[Rule, ...] = (
             r"|(?<!\w)(?:big)?(?:integer|int|int32|int64|long|number|numeric|decimal"
             r"|biginteger|bigdecimal)\s+cnpj\w*\s*[;={,)])"
         ),
-        explanation="The ORM will generate a numeric column that cannot hold letters.",
-        fix="Use a character field of length 14.",
+        explanation="O ORM vai gerar uma coluna numérica, incapaz de armazenar letras.",
+        fix="Use um campo de caractere com tamanho 14.",
         autofix=(
             ("models.BigIntegerField(", "models.CharField(max_length=14, "),
             ("models.IntegerField(", "models.CharField(max_length=14, "),
@@ -244,7 +249,7 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         id="CNPJ013",
-        title="Zero-padding a CNPJ back to 14 characters",
+        title="CNPJ preenchido com zeros à esquerda para voltar a 14 caracteres",
         severity=RISKY,
         # Receiver form (cnpj.zfill), chained form (String(x.cnpj).padStart)
         # and argument form (str_pad($cnpj, 14, ...)), which PHP uses.
@@ -253,23 +258,26 @@ RULES: tuple[Rule, ...] = (
             r"|(?:zfill|rjust|padStart|str_pad|PadLeft)\s*\(\s*[^)]{0,30}cnpj)"
         ),
         explanation=(
-            "Zero-padding exists to repair a CNPJ that was stored as a number. The "
-            "padding itself is harmless; what it implies about the storage is not."
+            "O preenchimento com zeros existe para consertar um CNPJ que foi armazenado como "
+            "número. O preenchimento em si é inofensivo; o que ele revela sobre o armazenamento "
+            "não é."
         ),
-        fix="Find where the leading zeros were lost. That is the actual defect.",
+        fix="Descubra onde os zeros à esquerda se perderam. É ali que está o defeito.",
     ),
     # -- Length and formatting assumptions --------------------------------
     Rule(
         id="CNPJ020",
-        title="CNPJ compared against a numeric literal",
+        title="CNPJ comparado com literal numérico",
         severity=RISKY,
         pattern=_c(r"cnpj\w*\s*(?:==|!=|===|!==|<>)\s*\d{6,}"),
-        explanation="Comparing a CNPJ to a bare number means it is being held as one.",
-        fix="Compare strings, and normalize case before comparing.",
+        explanation=(
+            "Comparar um CNPJ com um número puro significa que ele está sendo guardado como número."
+        ),
+        fix="Compare strings e normalize a caixa antes de comparar.",
     ),
     Rule(
         id="CNPJ021",
-        title="CNPJ normalized by stripping non-digits",
+        title="CNPJ normalizado removendo tudo que não é dígito",
         severity=BREAKS,
         pattern=_c(
             r"(?:replace|sub|gsub|preg_replace|RegExp)\s*\(\s*[^)]{0,30}"
@@ -277,10 +285,10 @@ RULES: tuple[Rule, ...] = (
         ),
         needs_cnpj_context=True,
         explanation=(
-            "Stripping everything that is not a digit deletes the letters out of an "
-            "alphanumeric CNPJ, producing a shorter value that then fails validation."
+            "Remover tudo que não é dígito apaga as letras de um CNPJ alfanumérico, produzindo um "
+            "valor mais curto que falha na validação depois."
         ),
-        fix="Strip only punctuation: remove [^0-9A-Z] after upper-casing.",
+        fix="Remova apenas a pontuação: descarte [^0-9A-Z] depois de passar para maiúsculas.",
         autofix=(
             ("[^0-9]", "[^0-9A-Z]"),
             (r"[^\d]", "[^0-9A-Z]"),
@@ -289,20 +297,22 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         id="CNPJ022",
-        title="CNPJ check digits computed without the ASCII-48 mapping",
+        title="Dígitos verificadores calculados sem o mapeamento ASCII-48",
         severity=REVIEW,
         pattern=_c(r"(?:int|ord|charCodeAt|Integer\.parseInt)\s*\(\s*\w*\s*\[\s*i\s*\]"),
         needs_cnpj_context=True,
         explanation=(
-            "A hand-rolled check-digit loop that converts each character with int() "
-            "rather than ord(c) - 48 cannot score letters."
+            "Um laço de dígito verificador escrito à mão que converte cada caractere com int() em "
+            "vez de ord(c) - 48 não consegue pontuar letras."
         ),
-        fix="Map each character with ord(c) - 48, which reproduces the legacy numeric "
-        "result exactly, so one code path serves both formats.",
+        fix=(
+            "Mapeie cada caractere com ord(c) - 48, que reproduz exatamente o resultado numérico "
+            "legado, de modo que um único caminho de código atende aos dois formatos."
+        ),
     ),
     Rule(
         id="CNPJ014",
-        title="CNPJ typed as an integer in a schema or API spec",
+        title="CNPJ tipado como inteiro em schema ou especificação de API",
         severity=BREAKS,
         # OpenAPI, JSON Schema and Avro put the type on its own line under the
         # field name, so this is keyed on the type and gated on nearby context
@@ -310,17 +320,18 @@ RULES: tuple[Rule, ...] = (
         pattern=_c(r"[\"']?type[\"']?\s*[:=]\s*[\"']?(?:integer|number|int32|int64|long)\b"),
         needs_cnpj_context=True,
         explanation=(
-            "A CNPJ declared as an integer in a specification does not stay in the "
-            "specification: every generated client, server stub and validator "
-            "inherits it, so one line here becomes the same defect in several "
-            "languages at once."
+            "Um CNPJ declarado como inteiro numa especificação não fica na especificação: todo "
+            "cliente, stub de servidor e validador gerado herda o tipo, então uma linha aqui vira "
+            "o mesmo defeito em várias linguagens ao mesmo tempo."
         ),
-        fix="Type it as a string with a maxLength of 14. Keep any pattern "
-        "constraint alphanumeric: ^[0-9A-Z]{12}[0-9]{2}$.",
+        fix=(
+            "Declare como string com maxLength 14. Mantenha qualquer restrição de pattern "
+            "alfanumérica: ^[0-9A-Z]{12}[0-9]{2}$."
+        ),
     ),
     Rule(
         id="CNPJ015",
-        title="CNPJ declared as an integer field without a separator",
+        title="CNPJ declarado como campo inteiro, sem separador",
         severity=BREAKS,
         # Prisma, Protobuf IDL and Go struct tags write `cnpj Int` with only
         # whitespace between name and type, which the assignment forms miss.
@@ -337,21 +348,21 @@ RULES: tuple[Rule, ...] = (
         # line twice, which is noise a reader has to reconcile.
         languages=frozenset({"prisma", "graphql", "go"}),
         explanation=(
-            "An integer field type carries into the generated schema and the "
-            "database column behind it."
+            "Um tipo de campo inteiro se propaga para o schema gerado e para a coluna de banco por "
+            "trás dele."
         ),
-        fix="Declare it as a string or varchar of length 14.",
+        fix="Declare como string ou varchar de tamanho 14.",
     ),
     Rule(
         id="CNPJ023",
-        title="Fixed-width numeric CNPJ in a file layout",
+        title="CNPJ numérico de largura fixa em layout de arquivo",
         severity=REVIEW,
         pattern=_c(r"cnpj\w*\s*[:=,]\s*(?:9{6,}|0{6,})"),
         explanation=(
-            "COBOL-style PIC clauses and fixed-width layouts that declare the CNPJ as "
-            "numeric will not carry letters through."
+            "Cláusulas PIC no estilo COBOL e layouts de largura fixa que declaram o CNPJ como "
+            "numérico não conseguem carregar letras."
         ),
-        fix="Redeclare the field as alphanumeric in the layout and in every consumer.",
+        fix="Redeclare o campo como alfanumérico no layout e em todos os consumidores.",
     ),
 )
 

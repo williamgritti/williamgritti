@@ -121,7 +121,9 @@ That last one returns nine characters with no exception at all, and fails
 validation later somewhere unrelated. None of this is fixed by upgrading a
 dependency.
 
-`fiscalkit scan` finds all of it — 12 rules, 8 languages. Checked before building
+`fiscalkit scan` finds all of it — 14 rules, 8 languages plus the schema formats
+that generate them, and it writes the patch for the four whose fix is
+mechanical. Checked before building
 that no such scanner exists on PyPI; every package that does is a validator.
 
 ---
@@ -156,16 +158,27 @@ section 6 should have been validated before I wrote the first version.
 
 Verified by execution in this session:
 
-- 186 tests, `ruff`, `ruff format` and `mypy --strict` clean, with and without
-  the optional MCP dependency
-- CI green on every push — Python 3.10 through 3.13, plus a job with the MCP
-  extra deliberately absent
+- **277 tests** across the three configurations — 264 core, 269 with the MCP
+  extra, plus 8 differential — with `ruff`, `ruff format` and `mypy --strict`
+  clean under each
+- **60,000 differential cases** against `brutils` and `validate-docbr`, two
+  implementations written by other people from the same published rules: zero
+  disagreements. Guarded against passing vacuously, and verified by sabotage —
+  perturbing the check-digit routine yields 500/500 disagreements
+- CI green on every push — all 10 checks on the current head. Python 3.10
+  through 3.13, a job with the MCP extra deliberately absent, and a job pinning
+  `mcp<2`
 - Wheel and sdist build, `twine check` passes, wheel installs into a pristine
   virtualenv and both console scripts run
 - `fiscalkit scan` exit codes from the installed wheel: `1` on certain breakage,
   `0` clean, `2` on a bad path
 - The GitHub Action's own shell under `bash -e`, which is how it caught that the
-  step aborted before writing outputs for anyone who actually had findings
+  step aborted before writing outputs for anyone who actually had findings — and
+  then caught the same class of bug a second time in the `--fix` steps, where
+  `set -o pipefail` turned `scan --json`'s exit code 1 into a silent abort
+- `--fix` end to end: the emitted diff is accepted by `git apply`, the findings
+  count drops, what remains is only the rules with no mechanical fix, and a
+  second `--fix` is a no-op
 - Every technical claim in `LAUNCH.md`
 
 Not verified, because it cannot be from here:

@@ -623,7 +623,7 @@ def test_numeric_column_claim_matches_observed_database_behaviour() -> None:
     # told only "cannot store" will conclude, wrongly, that they are unaffected.
     rule = next(r for r in RULES if r.id == "CNPJ011")
     lowered = rule.explanation.lower()
-    assert "reject" in lowered
+    assert "rejeit" in lowered
     assert "text" in lowered and "sqlite" in lowered
 
 
@@ -638,7 +638,7 @@ def test_numeric_coercion_claim_distinguishes_nan_from_truncation() -> None:
     rule = next(r for r in RULES if r.id == "CNPJ004")
     lowered = rule.explanation.lower()
     assert "nan" in lowered
-    assert "truncat" in lowered, "the silent parseInt case must be described"
+    assert "trunca" in lowered, "the silent parseInt case must be described"
     assert "12" in rule.explanation, "the concrete truncated value earns its place"
 
     # Both spellings are still detected.

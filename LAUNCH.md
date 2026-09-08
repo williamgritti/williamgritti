@@ -90,18 +90,58 @@ Post on dev.to, Medium or your own site first, so everything else can link to it
 > ```
 >
 > ```
+> QUEBRA app/fornecedor.py:4  [CNPJ001] Regex de CNPJ que aceita apenas dígitos
+>        CNPJ_RE = re.compile(r"^\d{14}$")
+>        correção: Use [0-9A-Z]{12}[0-9]{2}: as doze primeiras posições aceitam letras e os
+>                  dois dígitos verificadores continuam numéricos.
+>
 > QUEBRA app/fornecedor.py:8  [CNPJ012] CNPJ mapeado como campo inteiro no ORM
 >        cnpj = models.BigIntegerField(unique=True)
->        correcao: Use um campo de caractere de tamanho 14.
+>        correção: Use um campo de caractere com tamanho 14.
 >
-> QUEBRA schema.sql:3  [CNPJ011] Coluna CNPJ declarada como tipo numérico
->        cnpj BIGINT NOT NULL UNIQUE,
+> QUEBRA schema.sql:3  [CNPJ011] Coluna de CNPJ declarada com tipo numérico
+>        cnpj BIGINT NOT NULL UNIQUE
+>        correção: Migre para CHAR(14) ou VARCHAR(14). Planeje o backfill e todas as chaves
+>                  estrangeiras que referenciam esta coluna.
+>
+> 2 arquivo(s) analisado(s), 3 ocorrência(s): 3 quebra, 0 risco, 0 rever
 > ```
 >
-> São 12 regras em Python, JavaScript/TypeScript, SQL, Java, PHP, Go, C# e Ruby.
-> Sai com código diferente de zero só quando a quebra é certa, então dá pra usar
-> como gate de build. Tem GitHub Action e saída SARIF, que coloca o achado
-> anotado na linha do PR.
+> E ele não para no diagnóstico. Nas regras em que a correção é mecânica, ele
+> escreve o patch:
+>
+> ```bash
+> fiscalkit scan . --diff   # mostra o patch, no formato do git apply
+> fiscalkit scan . --fix    # aplica
+> ```
+>
+> ```diff
+> --- a/fornecedor.py
+> +++ b/fornecedor.py
+> @@ -2,8 +2,8 @@
+>  
+>  
+>  def normalizar(valor):
+> -    return re.sub(r"\D", "", valor)
+> +    return re.sub(r"[^0-9A-Z]", "", valor)
+>  
+>  
+>  def validar(cnpj):
+> -    return bool(re.match(r"^\d{14}$", cnpj))
+> +    return bool(re.match(r"^[0-9A-Z]{12}[0-9]{2}$", cnpj))
+> ```
+>
+> Só quatro das quatorze regras têm correção automática, e isso é de propósito.
+> `int(cnpj)` não dá pra consertar editando aquela linha: o código em volta é que
+> precisa parar de tratar CNPJ como número. Chutar ali geraria um diff plausível
+> que muda o comportamento em silêncio, que é exatamente o que essa ferramenta
+> existe pra evitar. Essas ficam reportadas e sem patch.
+>
+> São 14 regras em Python, JavaScript/TypeScript, SQL, Java, PHP, Go, C# e Ruby,
+> mais os formatos de schema que geram esse código: OpenAPI/JSON Schema, Protobuf,
+> Prisma e GraphQL. Sai com código diferente de zero só quando a quebra é certa,
+> então dá pra usar como gate de build. Tem GitHub Action e saída SARIF, que
+> coloca o achado anotado na linha do PR.
 >
 > Cada regra tem um teste que prova que o padrão aceita o CNPJ legado e rejeita ou
 > corrompe o alfanumérico. Regra que não demonstra essa diferença não entra.
@@ -142,8 +182,13 @@ Post as text, not a link. Link posts get ignored there.
 > hora. Devolve um valor mais curto e errado que só vai dar problema depois.
 >
 > Fiz um scanner que acha esses padrões (`pip install fiscalkit`,
-> `fiscalkit scan .`). MIT, 12 regras, 8 linguagens, com Action e SARIF pra anotar
-> no PR.
+> `fiscalkit scan .`). MIT, 14 regras, 8 linguagens (mais OpenAPI, Protobuf,
+> Prisma e GraphQL), com Action e SARIF pra anotar no PR.
+>
+> Nas regras em que a correção é mecânica ele ainda escreve o patch
+> (`--diff` mostra, `--fix` aplica). São só 4 das 14, de propósito: `int(cnpj)`
+> não se conserta naquela linha, e um diff chutado ali mudaria comportamento em
+> silêncio.
 >
 > Quem aí já mexeu na coluna do banco? Tô curioso pra saber se tem gente que já
 > migrou de `BIGINT` ou se todo mundo tá deixando pra junho de 2026.
@@ -178,6 +223,9 @@ Shorter, and the CTA is the conversation, not the install.
 > Publiquei um scanner open source que acha esses padrões em Python, JS/TS, SQL,
 > Java, PHP, Go, C# e Ruby: `pip install fiscalkit && fiscalkit scan .`
 >
+> Onde a correção é mecânica, ele escreve o patch (`--fix`). Onde não é, ele
+> reporta e não chuta.
+>
 > Se você roda sistema fiscal e quer saber o tamanho do estrago antes de junho,
 > me chama.
 
@@ -196,7 +244,7 @@ For the Fiscal Tech audience. Keep the visual language you already use.
 7. `int(cnpj)` → ESTOURA / coluna BIGINT → NEM ARMAZENA
 8. `re.sub(r"\D","",cnpj)` / **Esse não dá erro.** / Ele corrompe calado. / E falha depois, longe da causa.
 9. O do banco é o mais urgente: / ALTER TABLE + backfill + todas as FKs. / Isso não se faz em junho.
-10. `pip install fiscalkit` / `fiscalkit scan .` / Open source, MIT. / Link na bio.
+10. `pip install fiscalkit` / `fiscalkit scan .` / Acha, e onde dá, corrige com `--fix`. / Open source, MIT. / Link na bio.
 
 **Legenda:** Em julho de 2026 o CNPJ passa a aceitar letras. Testei cinco
 bibliotecas de validação: todas suportam, uma só com opt-in. Mas o problema maior

@@ -15,9 +15,11 @@ First release.
   libraries already handle the new format; what breaks is the surrounding code,
   which no dependency upgrade touches: `^\d{14}$` regexes, `BIGINT` columns,
   ORM integer fields, `int(cnpj)` casts, and `re.sub(r"\D", ...)` normalization
-  that silently corrupts rather than raising. Twelve rules across Python,
-  JavaScript/TypeScript, SQL, Java, PHP, Go, C# and Ruby, each verified in the
-  test suite to accept a legacy CNPJ and reject or corrupt an alphanumeric one.
+  that silently corrupts rather than raising. Fourteen rules across Python,
+  JavaScript/TypeScript, SQL, Java, PHP, Go, C# and Ruby, plus the schema formats
+  that generate them (OpenAPI/JSON Schema, Protobuf, Prisma, GraphQL), each
+  verified in the test suite to accept a legacy CNPJ and reject or corrupt an
+  alphanumeric one.
   Exits non-zero only on certain breakage so it can gate a build, and is exposed
   to agents as the `escanear_codigo` and `escanear_projeto` MCP tools.
 - **SARIF 2.1.0 output** (`--format sarif`) for GitHub code scanning, so findings
@@ -76,6 +78,23 @@ An intermediate version of this changelog reported that library as not
 maintainers, and it is recorded here rather than quietly rewritten, because it
 is the same over-generalisation this project has now made four times: test a
 sample, state a universal.
+
+### Reports written in Portuguese
+
+The CLI addressed Brazilian developers in every string it printed except the
+rule text, which was English, so a report read half-translated. Rule titles,
+explanations and fixes are now Portuguese, and so is the remaining chrome.
+
+`ValidationError.reason` is documented as a machine-readable code for caller-side
+i18n; the CLI now uses it that way instead of printing the library's English
+exception message. A test discovers the codes from the package source and fails
+if one has no translation, so a new code cannot reach a user in English.
+
+JSON and SARIF *keys* deliberately stay ASCII: they are the machine contract, and
+only the human-readable values changed.
+
+Long remediation text also wraps to a hanging indent instead of running past 140
+columns, which is the part of a report a reader skips.
 
 ### `--diff` and `--fix`
 

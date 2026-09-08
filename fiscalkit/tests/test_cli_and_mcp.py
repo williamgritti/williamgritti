@@ -160,7 +160,7 @@ def test_cli_nfe_flags_broken_totals(tmp_path, capsys) -> None:
         SAMPLE.replace("<vProd>226.40</vProd>", "<vProd>1.00</vProd>"), encoding="utf-8"
     )
     main(["nfe", str(path)])
-    assert "NAO" in capsys.readouterr().out
+    assert "NÃO" in capsys.readouterr().out
 
 
 def test_build_server_works_or_names_the_fix() -> None:
@@ -362,3 +362,65 @@ def test_action_manifest_declares_what_the_readme_promises() -> None:
     # mismatch that already broke this project's own CI once.
     assert "wrote $(pwd)" in scan_step["run"]
     assert "workspace root" in action["inputs"]["sarif-file"]["description"]
+
+
+def test_scan_report_lines_stay_within_a_terminal(tmp_path, capsys) -> None:
+    """A remediation sentence must wrap instead of running off the screen.
+
+    Several fixes are long enough to reach 140 columns unwrapped, and an
+    unwrapped line is precisely the part a reader skips. The wrap also has to
+    keep a hanging indent, so the continuation reads as part of the fix rather
+    than as a new finding.
+    """
+    (tmp_path / "f.py").write_text(
+        'import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8"
+    )
+    assert main(["scan", str(tmp_path)]) == 1
+    lines = capsys.readouterr().out.splitlines()
+
+    too_long = [ln for ln in lines if len(ln) > 95]
+    assert not too_long, f"unwrapped report lines: {too_long}"
+
+    label = next(i for i, ln in enumerate(lines) if "correção:" in ln)
+    continuation = lines[label + 1]
+    assert continuation.startswith(" " * len("       correção: ")), continuation
+    assert continuation.strip(), "the long fix must actually have wrapped"
+
+
+def test_scan_output_is_written_in_portuguese(tmp_path, capsys) -> None:
+    """The chrome and the rule prose must be in one language, not two.
+
+    The CLI addresses Brazilian developers and every other string it prints is
+    Portuguese; rule text in English made the report read half-translated.
+    """
+    (tmp_path / "f.py").write_text(
+        'import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n', encoding="utf-8"
+    )
+    assert main(["scan", str(tmp_path)]) == 1
+    out = capsys.readouterr().out
+    assert "correção:" in out
+    assert "dígitos" in out
+    assert "arquivo(s) analisado(s)" in out
+
+
+def test_every_reason_code_has_a_translation() -> None:
+    """A new reason code must not silently fall back to English.
+
+    The codes are discovered from the package source rather than listed here, so
+    adding one to a validator without translating it fails this test instead of
+    reaching a user as a stray English sentence in a Portuguese report.
+    """
+    import re
+    from pathlib import Path
+
+    import fiscalkit
+    from fiscalkit.cli import _REASON_PT
+
+    root = Path(fiscalkit.__file__).parent
+    found: set[str] = set()
+    for path in root.rglob("*.py"):
+        found |= set(re.findall(r'reason="([a-z_]+)"', path.read_text(encoding="utf-8")))
+
+    assert found, "no reason codes discovered -- the search itself is broken"
+    missing = found - set(_REASON_PT)
+    assert not missing, f"reason codes with no Portuguese translation: {sorted(missing)}"
