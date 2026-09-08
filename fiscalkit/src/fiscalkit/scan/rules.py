@@ -113,7 +113,13 @@ RULES: tuple[Rule, ...] = (
         id="CNPJ002",
         title="Formatted CNPJ mask accepting only digits",
         severity=BREAKS,
-        pattern=_c(r"(?:\\d|\[0-9\])\s*\{2\}\s*\\?\.\s*(?:\\d|\[0-9\])\s*\{3\}"),
+        # Anchored on the "/0000" branch group, which is unique to the CNPJ mask.
+        # An earlier version matched only the leading \d{2}\.\d{3}, and that
+        # fires on version strings, dotted dates, coordinates and -- worst for a
+        # Brazilian tool -- the CEP mask \d{2}\.\d{3}-\d{3}, which is in every
+        # address form in the country. Context-gated as well, for the same reason.
+        pattern=_c(r"(?:\\d|\[0-9\])\s*\{\s*3\s*\}\s*\\?/\s*(?:\\d|\[0-9\])\s*\{\s*4\s*\}"),
+        needs_cnpj_context=True,
         explanation=(
             "A 00.000.000/0000-00 mask built from digit classes rejects the "
             "alphanumeric form, which is punctuated identically."

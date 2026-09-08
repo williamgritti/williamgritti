@@ -397,3 +397,41 @@ def test_scanned_files_with_no_findings_are_clean(tmp_path) -> None:
     assert result.files_scanned == 1
     assert result.scanned_nothing is False
     assert result.is_clean is True
+
+
+# ---------------------------------------------------------------------------
+# CNPJ002 must not fire on the other dotted-numeric masks in Brazilian code
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("code", "label"),
+    [
+        ('VERSION_RE = re.compile(r"^\\d{2}\\.\\d{3}$")', "version string"),
+        ('DATE_RE = re.compile(r"\\d{2}\\.\\d{3}\\.\\d{4}")', "dotted date"),
+        ('COORD = r"[0-9]{2}\\.[0-9]{3}"', "coordinates"),
+        ('CEP_RE = re.compile(r"\\d{2}\\.\\d{3}-\\d{3}")', "CEP"),
+        ('CPF_RE = re.compile(r"\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}")', "CPF"),
+        ('ROUTE = r"\\d{3}/\\d{4}"', "route id with no CNPJ nearby"),
+    ],
+)
+def test_cnpj_mask_rule_ignores_other_masks(code: str, label: str) -> None:
+    """CEP is the one that matters most: it is in every Brazilian address form.
+
+    An earlier version of this rule matched only the leading ``\\d{2}\\.\\d{3}``
+    and fired on all of these. A Brazilian tool that cries wolf on a CEP regex
+    gets uninstalled the same afternoon.
+    """
+    assert "CNPJ002" not in _ids(code), f"false positive on {label}"
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        'cnpj_mask = re.compile(r"^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$")',
+        'CNPJ = r"[0-9]{2}\\.[0-9]{3}\\.[0-9]{3}/[0-9]{4}-[0-9]{2}"',
+    ],
+)
+def test_cnpj_mask_rule_still_catches_the_real_thing(code: str) -> None:
+    """The /0000 branch group is what distinguishes a CNPJ mask from the rest."""
+    assert "CNPJ002" in _ids(code)

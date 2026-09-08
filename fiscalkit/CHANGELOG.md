@@ -51,8 +51,9 @@ First release.
 ### Validated against real Brazilian CNPJ code
 
 Running the scanner against `brutils` 2.5.0 and `validate-docbr` 2.0.0 -- 41
-files of production Brazilian fiscal code that is already 2026-ready -- produced
-**zero false positives**, and surfaced one serious defect:
+files of production Brazilian fiscal code that is already 2026-ready -- plus
+3,212 files of unrelated third-party code, produced **zero false positives**,
+and surfaced one serious defect:
 
 - `site-packages` and other pruned directory names were matched against every
   component of the absolute path, including the root the caller named. Pointing
@@ -63,6 +64,14 @@ files of production Brazilian fiscal code that is already 2026-ready -- produced
   at least one file scanned, `scanned_nothing` reports the case, and the CLI
   exits 2 rather than 0, because silence from a tool that looked at nothing must
   not read as a pass.
+
+Probing the one rule that was neither context-gated nor keyed on the word
+"cnpj" found four false positives its pattern would have produced on ordinary
+code: version strings, dotted dates, coordinates, and the Brazilian CEP mask
+`\d{2}\.\d{3}-\d{3}` -- which appears in every address form in the country,
+so it would have fired in precisely the codebases this tool targets. The rule is
+now anchored on the `/0000` branch group unique to a CNPJ mask, and gated on
+nearby context like the others.
 
 The precision the scanner claims is now demonstrated rather than asserted:
 `brutils` writes `cnpj[12:].isdigit()`, which is exactly right under the new
