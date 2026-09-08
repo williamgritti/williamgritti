@@ -1,0 +1,207 @@
+# fiscalkit
+
+**Brazilian fiscal documents for Python and AI agents.**
+
+[![CI](https://github.com/williamgritti/fiscalkit/actions/workflows/ci.yml/badge.svg)](https://github.com/williamgritti/fiscalkit/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://pypi.org/project/fiscalkit/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Typed](https://img.shields.io/badge/mypy-strict-brightgreen)](pyproject.toml)
+
+Validate CPF and CNPJ, decode NF-e access keys without calling SEFAZ, and parse
+NF-e XML into typed objects with `Decimal` money. Zero runtime dependencies.
+Ships with a CLI and an MCP server, so the same logic serves your code, your
+terminal, and your AI agent.
+
+> **Supports the alphanumeric CNPJ** introduced by *IN RFB nº 2.229/2024* and
+> mandatory from **July 2026**. Most Python libraries still reject it outright.
+
+```bash
+pip install fiscalkit
+```
+
+---
+
+## Why this exists
+
+Brazilian fiscal data is unusually hostile to work with. Access keys are packed
+44-digit records that most code treats as opaque strings. NF-e XML arrives in at
+least three different root shapes, is frequently ISO-8859-1, and buries the same
+tax value under a dozen CST-specific element names. And the CNPJ — the identifier
+every one of those documents hangs off — changes format in 2026.
+
+`fiscalkit` handles all of that in one place, correctly, with the reasoning
+written down.
+
+---
+
+## Quick start
+
+### Decode an access key
+
+Everything below is computed locally. No network, no SEFAZ certificate.
+
+```python
+from fiscalkit import AccessKey
+
+key = AccessKey.parse("4324 0311 2223 3300 0181 5500 1000 0001 2310 0000 0010")
+
+key.uf.name          # 'Rio Grande do Sul'
+key.emitted_on       # datetime.date(2024, 3, 1)
+key.cnpj             # '11222333000181'
+key.model_name       # 'NF-e (Nota Fiscal Eletrônica)'
+key.number           # '000000123'
+key.is_contingency   # False
+```
+
+### Validate a CNPJ, old format or new
+
+One code path serves both. The 2026 algorithm maps each character with
+`ord(c) - 48`, which reproduces the legacy numeric result exactly — so you need
+no feature flag and no migration date.
+
+```python
+from fiscalkit import CNPJ, is_valid_cnpj
+
+is_valid_cnpj("11.222.333/0001-81")   # True  (legacy numeric)
+is_valid_cnpj("12.ABC.345/01DE-35")   # True  (alphanumeric, 2026)
+
+cnpj = CNPJ.parse("11.222.333/0001-81")
+cnpj.raiz              # '11222333'  -- shared by every branch
+cnpj.is_matriz         # True
+cnpj.is_alphanumeric   # False
+```
+
+### Parse an NF-e
+
+```python
+from fiscalkit import parse_nfe_file
+
+nfe = parse_nfe_file("nota.xml")
+
+nfe.issuer.name              # 'Comercio Exemplo Ltda'
+nfe.totals.invoice_total     # Decimal('233.90')
+nfe.is_authorized            # True
+nfe.totals_reconcile()       # True -- line items sum to the declared total
+```
+
+`totals_reconcile()` is the check worth wiring into an ingestion pipeline: it
+re-adds the line items and compares against the document's own declared total.
+A mismatch means the file is malformed or was edited after signing.
+
+### From the terminal
+
+```console
+$ fiscalkit chave 43240311222333000181550010000001231000000010
+chave      4324 0311 2223 3300 0181 5500 1000 0001 2310 0000 0010
+uf         RS (Rio Grande do Sul)
+emissao    2403  (2024-03-01)
+cnpj       11222333000181
+modelo     55 - NF-e (Nota Fiscal Eletrônica)
+serie      001
+numero     000000123
+emissao    Normal
+
+$ fiscalkit cnpj 12ABC34501DE35
+12.ABC.345/01DE-35  valido  (alfanumerico, filial 01DE)
+```
+
+Every command takes `--json` and exits non-zero on invalid input, so it drops
+straight into a shell pipeline or a CI gate:
+
+```bash
+fiscalkit nfe nota.xml --json | jq '.totais_conferem'
+```
+
+---
+
+## Use it from an AI agent
+
+`fiscalkit` ships an MCP server. Point Claude Code, Claude Desktop, or any MCP
+client at it and the model can read fiscal documents directly.
+
+```bash
+pip install 'fiscalkit[mcp]'
+```
+
+```json
+{
+  "mcpServers": {
+    "fiscalkit": { "command": "fiscalkit-mcp" }
+  }
+}
+```
+
+Eight tools are exposed: `validar_cpf`, `validar_cnpj`, `calcular_dv_cnpj`,
+`decodificar_chave`, `analisar_nfe`, `classificar_cfop`, `consultar_uf` and
+`listar_ufs`.
+
+Works with both `mcp` 1.x and 2.x — the SDK renamed `FastMCP` to `MCPServer` in
+2.0, and `fiscalkit` detects which one you have rather than making you pin.
+
+Invalid input comes back as a payload with `"valido": false` and a reason code,
+never as an exception. An agent that receives a structured "no" explains the
+problem; an agent that receives a stack trace just retries.
+
+---
+
+## One thing worth knowing about check digits
+
+The NF-e access key's check digit is a **transcription guard, not a tamper seal.**
+
+The spec maps mod-11 remainders 0 *and* 1 onto the same check digit of 0. So for
+the roughly two keys in eleven that end in 0, a number of single-digit changes
+still validate. Keys ending in any other digit do catch every single-digit
+substitution.
+
+This library documents that rather than papering over it, and the property is
+[pinned by a test](tests/test_chave.py). If you need authenticity rather than
+typo-detection, you need the issuer's digital signature or a SEFAZ query — not
+the check digit.
+
+---
+
+## What's covered
+
+| | |
+|---|---|
+| **CPF** | validation, formatting, repeated-digit rejection |
+| **CNPJ** | numeric **and** alphanumeric (2026), root/branch, check-digit generation |
+| **Access key** | full 44-digit decode, validation, DANFE-style formatting |
+| **NF-e XML** | `nfeProc` / `NFe` / `infNFe` roots, items, taxes across CST variants, totals, protocol |
+| **CFOP** | direction and scope classification |
+| **UF** | all 27 IBGE codes, lookup by code or acronym |
+
+Money is `Decimal` throughout. Binary floats silently corrupt totals that tax
+authorities reconcile to the cent.
+
+## Roadmap
+
+- CT-e and MDF-e parsing (the access key decoder already handles their models)
+- NFS-e, once the national standard settles
+- Inscrição Estadual validation, per-state
+- SPED Fiscal block parsing
+
+Issues and PRs welcome. If you hit an NF-e this fails to parse, open an issue
+with the smallest XML that reproduces it — with real identifiers redacted.
+
+## Development
+
+```bash
+git clone https://github.com/williamgritti/fiscalkit
+cd fiscalkit
+pip install -e '.[dev,mcp]'
+
+pytest              # 117 tests
+ruff check src tests
+mypy src/fiscalkit  # strict
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+---
+
+<sub>Built by [William Gritti](https://github.com/williamgritti) — IT analyst,
+Python developer, and tax-law specialist. Fifteen years inside the Brazilian
+public sector, which is where the motivation for this came from.</sub>

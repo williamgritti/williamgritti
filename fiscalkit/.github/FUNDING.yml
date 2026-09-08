@@ -1,0 +1,13 @@
+# Sponsorship rails for fiscalkit.
+#
+# Every line below is intentionally commented out. Uncomment a line only after
+# the corresponding account exists, and replace the placeholder with the public
+# handle for that account.
+#
+# Use handles, never an email address: a Ko-fi or PayPal.Me handle is a public
+# identifier designed to be shared, whereas an email address published in a repo
+# is scraped and reused. Never put a PayPal login email in this file.
+
+# github: williamgritti          # GitHub Sponsors (payout via Stripe/bank, not PayPal)
+# ko_fi: YOUR_KOFI_HANDLE        # Ko-fi pays straight into the linked PayPal account
+# custom: ["https://paypal.me/YOUR_PAYPAL_ME_HANDLE"]
