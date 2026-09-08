@@ -93,6 +93,12 @@ Added `CNPJ014` for the type-on-its-own-line case, context-gated, and `CNPJ015`
 for `cnpj Int` with only whitespace between name and type, which Prisma and IDLs
 use. `.proto`, `.prisma`, `.graphql`, `.gql` and `.avsc` are now read.
 
+`CNPJ015` is scoped to Prisma, GraphQL and Go, the languages that write
+`cnpj Int` with only whitespace between name and type. SQL is excluded because a
+numeric column there belongs to `CNPJ011`, and matching both reported the same
+line twice -- caught by the dogfood job, whose exact expected count made the
+duplicate visible instead of letting it pass as a larger number.
+
 `CNPJ015` first matched `print("cnpj integer")`, since prose puts the same two
 words together. It now requires the shape of a declaration -- end of line, an
 attribute, or punctuation after the type, never a closing quote. Re-measured

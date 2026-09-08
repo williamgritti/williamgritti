@@ -651,6 +651,7 @@ def test_numeric_coercion_claim_distinguishes_nan_from_truncation() -> None:
         ("int64 cnpj = 1;", "protobuf", "protobuf scalar field"),
         ("  cnpj Int @unique", "prisma", "prisma model field"),
         ("  cnpj Int", "prisma", "prisma field at end of line"),
+        ("  Cnpj int64", "go", "Go struct field"),
     ],
 )
 def test_schema_formats_are_covered(code: str, language: str, label: str) -> None:
@@ -695,3 +696,25 @@ def test_new_formats_are_recognised() -> None:
         ("event.avsc", "json"),
     ]:
         assert language_of(name) == expected, name
+
+
+def test_no_duplicate_rules_on_one_line_in_the_fixture() -> None:
+    """Two rules reporting the same defect is noise a reader must reconcile.
+
+    `cnpj BIGINT` briefly matched both CNPJ011, which owns numeric SQL columns,
+    and CNPJ015, which is for the separator-less `cnpj Int` form. CNPJ015 is now
+    scoped away from SQL rather than the expected count being raised to absorb it.
+    """
+    import collections
+    from pathlib import Path
+
+    fixture = Path(__file__).resolve().parent / "fixtures" / "legacy_project"
+    findings = scan_path(fixture).findings
+    per_line = collections.Counter((f.path, f.line) for f in findings)
+    duplicates = {loc: n for loc, n in per_line.items() if n > 1}
+    assert not duplicates, f"the same line reported by several rules: {duplicates}"
+
+
+def test_sql_numeric_column_is_owned_by_one_rule() -> None:
+    ids = {f.rule_id for f in scan_text("cnpj BIGINT NOT NULL UNIQUE", language="sql")}
+    assert ids == {"CNPJ011"}

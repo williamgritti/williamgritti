@@ -302,8 +302,13 @@ RULES: tuple[Rule, ...] = (
         # followed by a quote, and is a sentence rather than a field.
         pattern=_c(
             r"(?<![\w.])cnpj\w*\s+(?:big)?int(?:eger|32|64)?\b"
-            r"(?!\s*\()(?!\s*[\"'`])(?=\s*(?:$|[@?\[\],;:=)]|\w))"
+            r"(?!\s*\()(?!\s*[\"'`])(?=\s*(?:$|[@?!\[\],;:=)]|\w))"
         ),
+        # Scoped to the languages that actually write `cnpj Int` with only
+        # whitespace between name and type. SQL is deliberately excluded: a
+        # numeric column there is CNPJ011's, and matching both reported the same
+        # line twice, which is noise a reader has to reconcile.
+        languages=frozenset({"prisma", "graphql", "go"}),
         explanation=(
             "An integer field type carries into the generated schema and the "
             "database column behind it."
