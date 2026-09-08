@@ -790,3 +790,35 @@ def test_a_fixed_project_scans_clean(tmp_path) -> None:
     )
     result = scan_path(tmp_path)
     assert result.is_clean, [f"{f.rule_id} {f.path}:{f.line}" for f in result.findings]
+
+
+def test_documented_rule_counts_match_the_ruleset() -> None:
+    """Prose that states how many rules there are must not drift from the code.
+
+    "Twelve rules" outlived the twelfth rule in four separate documents this
+    session, including the two written to be published verbatim. A number in
+    prose has no compiler, so it gets one here: every "N rules"/"N regras" claim
+    in the repository's markdown has to equal ``len(RULES)``.
+
+    Skipped when the docs are not on disk, so an installed wheel still tests
+    clean.
+    """
+    import re
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    docs = [p for p in repo.rglob("*.md") if "node_modules" not in p.parts]
+    if not docs:
+        pytest.skip("documentation not present alongside the package")
+
+    claim = re.compile(r"\b(\d+|[Tt]welve|[Tt]hirteen|[Ff]ourteen|[Ff]ifteen)\s+(?:rules|regras)\b")
+    words = {"twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15}
+
+    wrong: list[str] = []
+    for path in docs:
+        for raw in claim.findall(path.read_text(encoding="utf-8")):
+            value = words.get(raw.lower()) or int(raw)
+            if value != len(RULES):
+                wrong.append(f"{path.relative_to(repo)}: claims {raw}, there are {len(RULES)}")
+
+    assert not wrong, "stale rule counts in documentation: " + "; ".join(wrong)

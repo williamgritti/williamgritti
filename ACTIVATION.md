@@ -158,7 +158,7 @@ section 6 should have been validated before I wrote the first version.
 
 Verified by execution in this session:
 
-- **277 tests** across the three configurations — 264 core, 269 with the MCP
+- **281 tests** across the three configurations — 268 core, 273 with the MCP
   extra, plus 8 differential — with `ruff`, `ruff format` and `mypy --strict`
   clean under each
 - **60,000 differential cases** against `brutils` and `validate-docbr`, two

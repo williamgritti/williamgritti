@@ -219,7 +219,7 @@ Skipped when the references are absent; a CI job installs them and runs it.
 
 ### Made the multi-language claim true
 
-The README claimed twelve rules across eight languages, but the rules had only
+The README claimed the ruleset covered eight languages, but the rules had only
 ever been tested against Python and SQL. Checked against idiomatic CNPJ handling
 in each claimed language and **eight of twenty-one cases were missed**: Go's
 `strconv.Atoi`, C#'s `Int32.Parse` and `public long Cnpj { get; set; }`, Ruby's
