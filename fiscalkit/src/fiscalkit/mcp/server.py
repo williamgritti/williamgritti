@@ -214,7 +214,10 @@ def classificar_cfop(cfop: str) -> dict[str, Any]:
     """Classify a CFOP into direction (inbound/outbound) and scope."""
     info = classify_cfop(cfop)
     if info is None:
-        return {"valido": False, "detalhe": "CFOP deve ter 4 digitos e comecar com 1,2,3,5,6 ou 7"}
+        return {
+            "valido": False,
+            "detalhe": "CFOP deve ter 4 dígitos e começar com 1, 2, 3, 5, 6 ou 7",
+        }
     return {
         "valido": True,
         "cfop": info.code,
@@ -229,7 +232,7 @@ def consultar_uf(consulta: str) -> dict[str, Any]:
     """Look up a federative unit by IBGE code or two-letter acronym."""
     uf = by_code(consulta) or by_acronym(consulta)
     if uf is None:
-        return {"encontrado": False, "detalhe": f"UF nao encontrada para '{consulta}'"}
+        return {"encontrado": False, "detalhe": f"UF não encontrada para '{consulta}'"}
     return {
         "encontrado": True,
         "codigo": uf.code,
@@ -328,8 +331,8 @@ def build_server() -> Any:
         "fiscalkit",
         instructions=(
             "Ferramentas para documentos fiscais brasileiros: valida CPF e CNPJ "
-            "(inclusive o CNPJ alfanumerico obrigatorio a partir de julho de 2026), "
-            "decodifica chaves de acesso de 44 digitos e analisa XML de NF-e. "
+            "(inclusive o CNPJ alfanumérico obrigatório a partir de julho de 2026), "
+            "decodifica chaves de acesso de 44 dígitos e analisa XML de NF-e. "
             "Tudo roda localmente, sem consultar a SEFAZ."
         ),
     )

@@ -266,7 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.set_defaults(func=handler)
 
     add("chave", "decodifica uma chave de acesso de 44 dígitos", "valor", "a chave", _cmd_chave)
-    add("cnpj", "valida um CNPJ (numerico ou alfanumerico)", "valor", "o CNPJ", _cmd_cnpj)
+    add("cnpj", "valida um CNPJ (numérico ou alfanumérico)", "valor", "o CNPJ", _cmd_cnpj)
     add("cpf", "valida um CPF", "valor", "o CPF", _cmd_cpf)
     add("cfop", "classifica um CFOP", "valor", "o CFOP", _cmd_cfop)
     add("nfe", "analisa um XML de NF-e", "arquivo", "caminho do XML", _cmd_nfe)

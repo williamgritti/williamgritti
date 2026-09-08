@@ -472,3 +472,66 @@ def test_escanear_projeto_accepts_a_single_file(tmp_path) -> None:
     assert result["ok"] is True
     assert result["total"] == 1
     assert result["ocorrencias"][0]["arquivo"] == "f.py"
+
+
+#: Words that are correct Portuguese only with their accents. Each of these
+#: shipped unaccented at some point in this project and had to be corrected by
+#: hand, which is why they are enumerated rather than trusted to review.
+_UNACCENTED_MISSPELLINGS = (
+    "numerico",
+    "alfanumerico",
+    "digitos",
+    "codigo",
+    "correcao",
+    "ocorrencia",
+    "extensao",
+    "diretorio",
+    "revisao",
+    "obrigatorio",
+    "analisavel",
+    "comecar",
+    "padrao",
+    "saida",
+    "util",
+)
+
+
+def _misspellings_in(text: str) -> list[str]:
+    lowered = text.lower()
+    return [word for word in _UNACCENTED_MISSPELLINGS if word in lowered]
+
+
+def test_cli_help_is_written_in_correct_portuguese() -> None:
+    """Help text is prose, so an unaccented word there is simply a misspelling.
+
+    Checked against rendered help rather than the source, because the source also
+    contains JSON keys and identifiers that are ASCII on purpose -- ``alfanumerico``
+    is a correct dict key and a misspelt sentence, depending on where it sits.
+    """
+    from fiscalkit.cli import build_parser
+
+    parser = build_parser()
+    texts = [parser.format_help()]
+    # argparse hides subparser help until you ask each one for it.
+    for action in parser._actions:  # argparse exposes no public accessor
+        choices = getattr(action, "choices", None)
+        if isinstance(choices, dict):
+            texts.extend(sub.format_help() for sub in choices.values())
+
+    found = {t: _misspellings_in(t) for t in texts}
+    bad = {k: v for k, v in found.items() if v}
+    assert not bad, (
+        f"unaccented Portuguese in CLI help: {sorted({w for v in bad.values() for w in v})}"
+    )
+
+
+def test_mcp_server_instructions_are_written_in_correct_portuguese() -> None:
+    """The instructions string is the first thing an agent reads about this tool."""
+    pytest.importorskip("mcp", reason="the MCP extra is not installed")
+    from fiscalkit.mcp.server import build_server
+
+    instructions = getattr(build_server(), "instructions", "") or ""
+    assert instructions, "the server must still carry instructions"
+    assert not _misspellings_in(instructions), (
+        f"unaccented Portuguese in MCP instructions: {_misspellings_in(instructions)}"
+    )
