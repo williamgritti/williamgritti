@@ -1,5 +1,13 @@
 name: CI
 
+# This is the workflow the project runs once it lives in its own repository, and
+# the one the README's badge points at. It is generated from the profile repo's
+# .github/workflows/fiscalkit.yml by tools/sync_ci.py, so the two cannot drift:
+# every job that has ever caught a bug here is a job that runs on day one there.
+#
+# No path filter and no working-directory: in a standalone repository every
+# change is this project's, and the repository root is the package root.
+
 on:
   push:
     branches: [main]
@@ -7,6 +15,7 @@ on:
 
 jobs:
   test:
+    name: tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -17,12 +26,63 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install
+      - name: Install with the optional MCP extra
         run: pip install -e '.[dev,mcp]'
       - name: Test
         run: pytest
 
+  test-without-mcp:
+    name: tests (no mcp extra)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The MCP server is optional. The library, its tests and the CLI must all
+      # work when it is absent, which the matrix above cannot show.
+      - name: Install core only
+        run: pip install -e '.[dev]'
+      - name: Test
+        run: pytest
+      - name: Types without the optional dependency
+        run: mypy src/fiscalkit
+      - name: CLI works without the optional dependency
+        run: |
+          python -m fiscalkit.cli chave 43240311222333000181550010000001231000000010
+          python -m fiscalkit.cli cnpj 12ABC34501DE35
+
+  test-mcp-1x:
+    name: tests (mcp 1.x)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The server supports both SDK generations behind a runtime import
+      # fallback, since FastMCP was renamed MCPServer in 2.0. The default extra
+      # resolves to 2.x, so without this job the 1.x half of that claim is
+      # never executed anywhere.
+      - name: Install with the 1.x SDK pinned
+        run: |
+          pip install -e '.[dev]'
+          pip install 'mcp<2'
+      - name: Confirm the 1.x class is what resolves
+        run: |
+          python -c "
+          from fiscalkit.mcp.server import _server_class
+          cls = _server_class()
+          assert cls.__name__ == 'FastMCP', cls
+          print('resolved', cls.__module__ + '.' + cls.__name__)
+          "
+      - name: Test
+        run: pytest
+      - name: Types
+        run: mypy src/fiscalkit
+
   quality:
+    name: lint, format, types
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,3 +97,268 @@ jobs:
         run: ruff format --check src tests
       - name: Types
         run: mypy src/fiscalkit
+
+  differential:
+    name: differential vs reference implementations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Every other correctness test was written by the same author as the code
+      # it checks, so a misreading of the spec would be reproduced on both sides
+      # and pass. These compare against two independent implementations.
+      - name: Install with the reference libraries
+        run: |
+          pip install -e '.[dev]'
+          pip install brutils validate-docbr
+      - name: Confirm the references are installed, not skipped
+        run: |
+          python -c "import brutils, validate_docbr; print('references present')"
+      - name: Differential tests
+        run: pytest tests/test_differential.py -v --no-header -q
+
+  action:
+    name: dogfood the action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The action has only ever been exercised by simulating its shell. That
+      # does not cover inputs, ${{ }} interpolation, $GITHUB_OUTPUT parsing or
+      # composite step semantics -- all places this can break silently.
+      - name: Run against a fixture with known breakage
+        id: broken
+        uses: ./
+        with:
+          path: tests/fixtures/legacy_project
+          version: ./
+          fail-on-break: "false"
+          sarif-file: broken.sarif
+
+      - name: Assert the outputs match what the fixture contains
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "total=${{ steps.broken.outputs.total }} breaking=${{ steps.broken.outputs.breaking }} ready=${{ steps.broken.outputs.ready }}"
+          [ "${{ steps.broken.outputs.total }}"    = "3" ]
+          [ "${{ steps.broken.outputs.breaking }}" = "3" ]
+          [ "${{ steps.broken.outputs.ready }}"    = "false" ]
+
+      # The action writes its own reports. If one lands inside the tree it is
+      # about to scan, the next scan reads it: the summary then lists findings
+      # in fiscalkit's own output and contradicts the count in its own header.
+      # `path` defaults to ".", so this is the DEFAULT configuration, and it is
+      # invisible to every assertion above because they scan a subdirectory.
+      - name: Assert the action does not scan its own reports
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          mkdir -p "$work/app"
+          printf 'import re\nCNPJ_RE = re.compile(r"^\\d{14}$")\n' > "$work/app/f.py"
+
+          export RUNNER_TEMP="$(mktemp -d)"
+          cd "$work"
+
+          # Exactly what the composite step does, with path defaulted to ".".
+          report="${RUNNER_TEMP}/fiscalkit-report.json"
+          text_report="${RUNNER_TEMP}/fiscalkit-report.txt"
+          export REPORT="$report"
+          fiscalkit scan . --format sarif > fiscalkit.sarif || true
+          fiscalkit scan . --json > "$report" || true
+          fiscalkit scan . > "$text_report" || true
+
+          header=$(python -c "import json,os;print(json.load(open(os.environ['REPORT']))['total'])")
+          listed=$(grep -c '^QUEBRA\|^RISCO \|^REVER ' "$text_report" || true)
+          echo "header=$header listed=$listed"
+          [ "$header" = "$listed" ] || {
+            echo "the summary header and its listing disagree -- a report was scanned"
+            cat "$text_report"
+            exit 1
+          }
+
+          # And nothing reported may live in a file the action itself wrote.
+          python - <<'PY'
+          import json, os
+          data = json.load(open(os.environ["REPORT"]))
+          bad = [o["arquivo"] for o in data["ocorrencias"] if "fiscalkit-report" in o["arquivo"]]
+          assert not bad, f"the action scanned its own report: {bad}"
+          PY
+
+      - name: Assert the SARIF is valid and points at the right lines
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          d = json.load(open("broken.sarif"))
+          assert d["version"] == "2.1.0", d["version"]
+          run = d["runs"][0]
+          assert run["tool"]["driver"]["name"] == "fiscalkit"
+          results = run["results"]
+          assert len(results) == 3, len(results)
+          assert all(r["level"] == "error" for r in results), results
+          uris = {r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for r in results}
+          assert uris == {"fornecedor.py", "schema.sql"}, uris
+          print("SARIF ok:", len(results), "results across", len(uris), "files")
+          PY
+
+      # fail-on-break defaults to true, so this step must fail. continue-on-error
+      # captures that without failing the job, and the outcome is asserted.
+      - name: Run with fail-on-break enabled (expected to fail)
+        id: strict
+        continue-on-error: true
+        uses: ./
+        with:
+          path: tests/fixtures/legacy_project
+          version: ./
+          sarif-file: strict.sarif
+
+      - name: Assert it failed the step rather than passing quietly
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "outcome=${{ steps.strict.outcome }}"
+          [ "${{ steps.strict.outcome }}" = "failure" ]
+
+      # Not src/ as a whole: rules.py quotes ^\d{14}$ in its module docstring
+      # while explaining what it detects, so the scanner reports itself there.
+      # Prose that quotes a pattern near the word "cnpj" is worth a human look,
+      # so that match is defensible rather than a bug. This step points at code
+      # that handles CNPJs instead of describing the patterns.
+      - name: Run against a clean subtree (expected clean)
+        id: clean
+        uses: ./
+        with:
+          path: src/fiscalkit/documents
+          version: ./
+          sarif-file: clean.sarif
+
+      - name: Assert a clean tree reports ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ steps.clean.outputs.breaking }}" = "0" ]
+          [ "${{ steps.clean.outputs.ready }}"    = "true" ]
+
+      # --fix writes to a user's source files, which is the riskiest thing this
+      # package does and was covered only by unit tests. Exercised here against a
+      # real checkout, including that the diff is genuinely git-appliable.
+      - name: Install fiscalkit for the fix checks
+        shell: bash
+        run: pip install .
+
+      - name: The diff must be something git apply accepts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/fixcheck && mkdir -p /tmp/fixcheck
+          cp -r tests/fixtures/legacy_project/* /tmp/fixcheck/
+          cd /tmp/fixcheck
+          git init -q . && git config user.email ci@ci && git config user.name ci
+          git add -A && git commit -qm base
+          fiscalkit scan . --diff > /tmp/fk.patch || true
+          test -s /tmp/fk.patch
+          git apply --check /tmp/fk.patch
+          git apply /tmp/fk.patch
+          echo "git apply accepted and applied the generated diff"
+          git checkout -q .
+
+      - name: --fix resolves the mechanical findings and leaves the rest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/fixcheck
+          # `scan` exits non-zero by design when it finds breakage, and this step
+          # runs under `set -e -o pipefail`, so every invocation has to tolerate
+          # that or the step dies before producing any output. This is the same
+          # trap the action itself hit; redirect to a file rather than piping.
+          # Reports go outside the scanned tree. A .json written inside it is
+          # itself scanned on the next pass -- and --fix will happily rewrite the
+          # report, which is how this step first reported one finding too many.
+          fiscalkit scan . --json > /tmp/before.json || true
+          before=$(python -c "import json;print(json.load(open('/tmp/before.json'))['total'])")
+          fiscalkit scan . --fix || true
+          fiscalkit scan . --json > /tmp/after.json || true
+          after=$(python -c "import json;print(json.load(open('/tmp/after.json'))['total'])")
+          echo "findings before=$before after=$after"
+          [ "$after" -lt "$before" ]
+          # Exactly the rules with no mechanical rewrite may remain.
+          python -c "
+          import json, sys
+          left = {o['regra'] for o in json.load(open('/tmp/after.json'))['ocorrencias']}
+          fixable = {'CNPJ001', 'CNPJ011', 'CNPJ012', 'CNPJ021'}
+          assert not (left & fixable), f'--fix left a fixable rule behind: {left & fixable}'
+          print('remaining, all needing human judgement:', sorted(left) or 'none')
+          "
+
+      - name: Applying twice must change nothing
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/fixcheck
+          git add -A && git commit -qm fixed
+          fiscalkit scan . --fix || true
+          git diff --exit-code
+          echo "second --fix was a no-op"
+
+
+  package:
+    name: build and install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          pip install build twine
+          python -m build
+          twine check dist/*
+      - name: Install the wheel into a clean environment and use it
+        run: |
+          python -m venv /tmp/wheeltest
+          /tmp/wheeltest/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/wheeltest/bin/python -c "from fiscalkit import *; import fiscalkit; assert len(fiscalkit.__all__) > 30"
+          /tmp/wheeltest/bin/fiscalkit cnpj 12ABC34501DE35
+
+      # pyproject declares the "Typing :: Typed" classifier and the README shows a
+      # mypy-strict badge. PEP 561 makes both meaningless without a py.typed marker
+      # IN THE BUILT ARTIFACT: a consumer's mypy then fails on the import itself
+      # with "missing library stubs or py.typed marker". The unit test checks the
+      # source tree, which cannot catch a packaging config that drops the file.
+      - name: Assert the wheel carries the PEP 561 marker, and that types reach a consumer
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import glob, zipfile
+          whl = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(whl).namelist()
+          assert "fiscalkit/py.typed" in names, f"py.typed missing from {whl}: {names}"
+          print("py.typed present in", whl)
+          PY
+
+          /tmp/wheeltest/bin/pip install --quiet mypy
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          printf 'from fiscalkit import is_valid_cnpj\n\nok: bool = is_valid_cnpj("12ABC34501DE35")\n' > ok.py
+          printf 'from fiscalkit import is_valid_cnpj\n\nbad: int = is_valid_cnpj(12345)\n' > bad.py
+
+          # Correct usage must type-check clean against the installed wheel.
+          /tmp/wheeltest/bin/mypy ok.py
+
+          # And a real type error must be REPORTED AS SUCH. Before the marker existed
+          # this failed with import-untyped instead, which looks like a failure while
+          # proving the annotations were invisible.
+          out=$(/tmp/wheeltest/bin/mypy bad.py || true)
+          echo "$out"
+          echo "$out" | grep -q 'incompatible type "int"' \
+            || { echo "the argument type error was not reported -- annotations are not reaching consumers"; exit 1; }
+          echo "$out" | grep -q 'import-untyped' \
+            && { echo "mypy still treats fiscalkit as untyped"; exit 1; } || true

@@ -76,8 +76,13 @@ git push -u origin main
 the way a prospect reaches you without opening a public bug report, and the link
 404s until it is enabled.
 
-Once it moves, `fiscalkit/.github/workflows/ci.yml` starts running on its own and
-the root `.github/workflows/fiscalkit.yml` in the profile repo can be deleted.
+Once it moves, `.github/workflows/ci.yml` starts running on its own and the root
+`.github/workflows/fiscalkit.yml` in the profile repo can be deleted. That file
+is generated from the profile repo's workflow by `tools/sync_ci.py` and carries
+the same seven jobs, so the badge in the README means the same thing after the
+move as before it. It was two jobs until this was noticed: it never runs while
+the project sits in a subdirectory, so it had gone stale without anything
+failing.
 
 Make sure the contact link in your GitHub profile actually resolves to something
 you read. The README's closing section sends commercial questions to
@@ -274,7 +279,7 @@ skipped on the CNPJ angle and had to be wrong twice to recover from.
 
 Verified by execution in this session:
 
-- **306 tests** with the MCP extra and both reference libraries installed; 290
+- **307 tests** with the MCP extra and both reference libraries installed; 291
   of them need neither. `ruff`, `ruff format` and `mypy --strict` clean under
   each configuration
 - A mutation sweep over every module that carries logic: **99 mutations, 95

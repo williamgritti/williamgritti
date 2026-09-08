@@ -935,3 +935,38 @@ def test_emitted_diff_for_a_crlf_file_touches_one_line(tmp_path) -> None:
     assert len(added) == 1, added
     assert len(removed) == 1, removed
     assert added[0].endswith("\r\n"), repr(added[0])
+
+
+def test_standalone_ci_matches_the_workflow_that_runs() -> None:
+    """The CI the project keeps must equal the CI that is actually proven here.
+
+    While the project lives in a subdirectory, GitHub runs the profile repo's
+    workflow and never runs this package's own `.github/workflows/ci.yml`. So
+    that file went stale silently: written in the first commit with two jobs,
+    while the workflow that runs grew to seven -- including every job that has
+    caught a real bug. Extracting the project would have swapped a CI that proves
+    things for one that does not, under a README badge pointing at the weaker one
+    and claiming otherwise.
+
+    Skipped once the project is extracted, when there is no profile-repo workflow
+    left to compare against and this file simply is the CI.
+    """
+    import sys
+    from pathlib import Path
+
+    package_root = Path(__file__).resolve().parents[1]
+    source = package_root.parent / ".github" / "workflows" / "fiscalkit.yml"
+    target = package_root / ".github" / "workflows" / "ci.yml"
+    if not source.is_file():
+        pytest.skip("no profile-repo workflow to sync from; the project is standalone")
+
+    sys.path.insert(0, str(package_root / "tools"))
+    try:
+        import sync_ci
+    finally:
+        sys.path.pop(0)
+
+    expected = sync_ci.render(source.read_text(encoding="utf-8"))
+    assert target.read_text(encoding="utf-8") == expected, (
+        "the standalone CI is out of date; run: python tools/sync_ci.py"
+    )

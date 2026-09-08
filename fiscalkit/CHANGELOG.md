@@ -96,6 +96,27 @@ only the human-readable values changed.
 Long remediation text also wraps to a hanging indent instead of running past 140
 columns, which is the part of a report a reader skips.
 
+### The CI this project keeps had gone stale without anything failing
+
+While the package lives in a subdirectory, GitHub runs the profile repo's
+workflow and never runs `.github/workflows/ci.yml` here. So that file sat exactly
+as first written -- two jobs -- while the workflow that actually runs grew to
+seven, including every job that has caught a real bug: the MCP-absent build, the
+`mcp<2` pin, the differential suite, the Action dogfood, and the packaging
+checks.
+
+That file is the one the project keeps when it is extracted, and the one the
+README's badge points at. Extracting would have swapped a CI that proves things
+for one that does not, under a badge claiming otherwise, on day one.
+
+It is now generated from the profile repo's workflow by `tools/sync_ci.py`, and a
+test fails if the two have drifted. Verified in a real standalone layout rather
+than by reading: the package installs from the repository root, the suite, lint,
+format and strict types all pass, and every path the dogfood job depends on
+resolves -- the composite action at `./`, the broken fixture reporting 3 findings
+and 3 breaking, the clean tree reporting ready, and the SARIF naming both
+expected files.
+
 ### Five more untested guards, found by extending the mutation sweep
 
 Each of these was correct code that no test held in place, so any of them could
