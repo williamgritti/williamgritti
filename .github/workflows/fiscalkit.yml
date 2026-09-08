@@ -107,6 +107,27 @@ jobs:
       - name: Types
         run: mypy src/fiscalkit
 
+  differential:
+    name: differential vs reference implementations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Every other correctness test was written by the same author as the code
+      # it checks, so a misreading of the spec would be reproduced on both sides
+      # and pass. These compare against two independent implementations.
+      - name: Install with the reference libraries
+        run: |
+          pip install -e '.[dev]'
+          pip install brutils validate-docbr
+      - name: Confirm the references are installed, not skipped
+        run: |
+          python -c "import brutils, validate_docbr; print('references present')"
+      - name: Differential tests
+        run: pytest tests/test_differential.py -v --no-header -q
+
   action:
     name: dogfood the action
     runs-on: ubuntu-latest

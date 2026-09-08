@@ -320,7 +320,7 @@ git clone https://github.com/williamgritti/fiscalkit
 cd fiscalkit
 pip install -e '.[dev,mcp]'
 
-pytest              # 181 tests
+pytest              # 241 tests
 ruff check src tests
 mypy src/fiscalkit  # strict
 ```
