@@ -248,3 +248,75 @@ def test_cli_scan_empty_returns_2(tmp_path, capsys) -> None:
     (tmp_path / "readme.md").write_text("nothing here\n", encoding="utf-8")
     assert main(["scan", str(tmp_path)]) == 2
     assert "nenhum arquivo analisado" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# The MCP protocol itself, not just the functions behind it
+# ---------------------------------------------------------------------------
+
+
+def _call(server, name: str, args: dict) -> str:
+    """Round-trip one tool call and return the text content."""
+    import asyncio
+
+    result = asyncio.run(server.call_tool(name, args))
+    content = result[0] if isinstance(result, tuple) else result
+    if hasattr(content, "content"):
+        content = content.content
+    if isinstance(content, list) and content and hasattr(content[0], "text"):
+        return str(content[0].text)
+    return str(content)
+
+
+def test_every_tool_generates_a_usable_schema() -> None:
+    """Schema generation is where a bad annotation surfaces, not at call time."""
+    pytest.importorskip("mcp")
+    import asyncio
+
+    from fiscalkit.mcp.server import build_server
+
+    tools = asyncio.run(build_server().list_tools())
+    assert {t.name for t in tools} == set(TOOL_FUNCTIONS)
+    for tool in tools:
+        schema = getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", {})
+        assert schema.get("type") == "object", f"{tool.name} has no object schema"
+        for name, prop in schema.get("properties", {}).items():
+            # Every parameter must be expressible in JSON Schema; a bare union or
+            # an unrepresentable type shows up here as a missing declaration.
+            assert "type" in prop or "anyOf" in prop, f"{tool.name}.{name} is untyped"
+
+
+def test_tools_answer_over_the_protocol() -> None:
+    """Calling the function directly is not evidence the tool works over MCP."""
+    pytest.importorskip("mcp")
+
+    from fiscalkit.mcp.server import build_server
+
+    server = build_server()
+    assert '"valido": true' in _call(server, "validar_cnpj", {"cnpj": "12ABC34501DE35"})
+    assert '"total": 27' in _call(server, "listar_ufs", {})
+    assert '"uf_sigla": "RS"' in _call(
+        server, "decodificar_chave", {"chave": "43240311222333000181550010000001231000000010"}
+    )
+
+
+def test_optional_parameter_may_be_omitted_over_the_protocol() -> None:
+    """`linguagem` is optional; omitting it must not be a schema violation."""
+    pytest.importorskip("mcp")
+
+    from fiscalkit.mcp.server import build_server
+
+    server = build_server()
+    text = _call(server, "escanear_codigo", {"codigo": "from fiscalkit import is_valid_cnpj"})
+    assert '"pronto_para_2026": true' in text
+
+
+def test_invalid_input_is_a_payload_over_the_protocol_too() -> None:
+    """The no-exceptions contract has to hold through the transport, not just in-process."""
+    pytest.importorskip("mcp")
+
+    from fiscalkit.mcp.server import build_server
+
+    server = build_server()
+    assert '"valido": false' in _call(server, "validar_cnpj", {"cnpj": "nope"})
+    assert '"valido": false' in _call(server, "decodificar_chave", {"chave": "123"})
