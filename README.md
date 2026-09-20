@@ -35,8 +35,8 @@ class William:
 
 ## `cat stack.txt`
 
-What I actually build with. The public repos here run on Flask and JavaScript;
-the rest of the iceberg is below the waterline, in repos you can't see.
+What I actually build with. What's public here shows a slice of it — Python, Flask,
+TypeScript; the rest of the iceberg is below the waterline, in repos you can't see.
 
 ![Python](https://img.shields.io/badge/Python-0B0E14?style=for-the-badge&logo=python&logoColor=E11D2A)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0B0E14?style=for-the-badge&logo=fastapi&logoColor=E11D2A)
@@ -52,10 +52,12 @@ the rest of the iceberg is below the waterline, in repos you can't see.
 
 ## `ls -la` *(public)*
 
-Two repos out in the open. Yes, that's intentional. The good stuff lives behind `chmod 700` and a personality.
+A handful of repos out in the open. Still a handful, still deliberate — the rest lives behind `chmod 700` and a personality.
 
+- **[`atende-zap-ia`](https://github.com/williamgritti/atende-zap-ia)** — `TypeScript` · a WhatsApp attendant running on Claude over the Evolution API. Answers like a person, and hands the conversation to an actual one when it should — that handoff is mandatory, not a setting.
 - **[`cinapse-app`](https://github.com/williamgritti/cinapse-app)** — `JavaScript` · the cinema habit, compiled. → **[live demo ↗](https://cinapse-app.vercel.app/)**
 - **[`microempresa-app`](https://github.com/williamgritti/microempresa-app)** — `Python · Flask` · a small-business manager — clients, inventory, cash flow, quotes-to-PDF — that escaped containment.
+- **[`oss-bug-repro-lite`](https://github.com/williamgritti/oss-bug-repro-lite)** — `MIT` · templates that turn "it doesn't work on my machine" into a small, repeatable reproduction somebody can actually act on.
 
 > Everything worth shipping, I ship in private. Consider this the trailer, not the film.
 
