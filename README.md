@@ -54,6 +54,7 @@ TypeScript; the rest of the iceberg is below the waterline, in repos you can't s
 
 A handful of repos out in the open. Still a handful, still deliberate — the rest lives behind `chmod 700` and a personality.
 
+- **[`fiscalkit`](https://github.com/williamgritti/fiscalkit)** — `Python · MIT` · Brazilian fiscal documents with zero runtime dependencies: CPF, CNPJ including the 2026 alphanumeric format, NF-e access keys and the XML itself, behind a CLI and an MCP server. `fiscalkit scan` finds the code in your project that breaks in July 2026 — the regex, the integer cast, the numeric column — none of which a dependency upgrade repairs.
 - **[`atende-zap-ia`](https://github.com/williamgritti/atende-zap-ia)** — `TypeScript` · a WhatsApp attendant running on Claude over the Evolution API. Answers like a person, and hands the conversation to an actual one when it should — that handoff is mandatory, not a setting.
 - **[`cinapse-app`](https://github.com/williamgritti/cinapse-app)** — `JavaScript` · the cinema habit, compiled. → **[live demo ↗](https://cinapse-app.vercel.app/)**
 - **[`microempresa-app`](https://github.com/williamgritti/microempresa-app)** — `Python · Flask` · a small-business manager — clients, inventory, cash flow, quotes-to-PDF — that escaped containment.
